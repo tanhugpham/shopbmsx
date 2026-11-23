@@ -257,6 +257,8 @@ def test_workflow_stays_read_only() -> None:
     assert "type: cron" not in blueprint
     assert "scripts/start_web.py" in blueprint
     assert "PYTHONPATH=src" in blueprint
+    assert "pip install -r requirements.txt" in blueprint
+    assert "PYTHON_VERSION" in blueprint
     assert 'value: "true"' in blueprint
     assert "checksPass" in blueprint
     assert "sync: false" in blueprint

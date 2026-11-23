@@ -25,11 +25,16 @@ Cron job trên Render cần gói trả phí. Free chỉ có **Web Service**. L�
 | Start Command | `PYTHONPATH=src python scripts/start_web.py` |
 | Instance type | **Free** |
 
+Hai ô này khác nhau. **Build** chỉ cài thư viện. **Start** mới chạy web. Nếu Build Command đang là `python scripts/start_web.py` thì deploy sẽ lỗi `No module named 'pydantic'`.
+
+Thêm biến `PYTHON_VERSION` = `3.13.7` (Render mặc định 3.14). Repo có file `.python-version`.
+
 5. **Advanced → Add Environment Variable**, lần lượt:
 
 | Key | Value |
 | --- | --- |
 | `PYTHONPATH` | `src` |
+| `PYTHON_VERSION` | `3.13.7` |
 | `DRY_RUN` | `true` |
 | `ENABLE_PURCHASE` | `false` |
 | `ENABLE_TELEGRAM` | `false` |

@@ -14,6 +14,8 @@ services:
     envVars:
       - key: PYTHONPATH
         value: src
+      - key: PYTHON_VERSION
+        value: "3.13.7"
       - key: DRY_RUN
         value: "true"
       - key: ENABLE_PURCHASE
