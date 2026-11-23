@@ -252,6 +252,10 @@ def test_workflow_stays_read_only() -> None:
     assert "pytest" in ci
     assert "NASTELE_API_KEY" not in ci
     blueprint = (ROOT / "render.yaml").read_text(encoding="utf-8")
+    assert "type: web" in blueprint
+    assert "plan: free" in blueprint
+    assert "type: cron" not in blueprint
+    assert "shop_integration.web" in blueprint
     assert 'value: "true"' in blueprint
     assert "checksPass" in blueprint
     assert "sync: false" in blueprint

@@ -53,6 +53,8 @@ python -m shop_integration sync
 - `POST /orders` và `GET /orders/{id}/delivery` bị chặn trước khi mở kết nối.
 - `ENABLE_PURCHASE=true` và `ENABLE_TELEGRAM=true` bị bỏ qua.
 
+Deploy Render miễn phí (Web Service, không Cron, không thẻ): [docs/render_free.md](docs/render_free.md).
+
 Chi tiết cài đặt: [docs/setup_vi.md](docs/setup_vi.md).
 
 Kiến trúc và hợp đồng API: [docs/architecture.md](docs/architecture.md).

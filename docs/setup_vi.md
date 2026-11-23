@@ -201,7 +201,11 @@ python -m pytest
 
 Test dùng HTTP giả lập và gateway Google trong bộ nhớ. Chúng không cần API key thật và không gọi mạng Shop Xoài Non hay Google.
 
-## 10. Khi gặp lỗi
+## 10. Render miễn phí
+
+Cron Render cần thẻ. Dùng **New → Web Service**, instance **Free**. Start command: `python -m shop_integration.web`. Lịch chạy dùng GitHub Actions. Bảng bấm từng bước: [render_free.md](render_free.md).
+
+## 11. Khi gặp lỗi
 
 | Thông báo | Việc cần làm |
 | --- | --- |

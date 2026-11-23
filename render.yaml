@@ -1,15 +1,15 @@
-# Blueprint Render. Key không nằm trong file này.
+# Web Service miễn phí. Cron Render cần gói trả phí, không dùng ở đây.
 # Push lên nhánh main chỉ deploy sau khi GitHub check "ci" đạt.
 services:
-  - type: cron
-    name: shopxoainon-sync-sources
+  - type: web
+    name: shopxoainon-web
     runtime: python
-    plan: starter
+    plan: free
     region: singapore
     branch: main
-    schedule: "17 1 * * *"
     buildCommand: pip install -r requirements.txt
-    startCommand: sh scripts/render_sync.sh
+    startCommand: python -m shop_integration.web
+    healthCheckPath: /health
     autoDeployTrigger: checksPass
     envVars:
       - key: PYTHONPATH
@@ -39,4 +39,6 @@ services:
       - key: GOOGLE_DOCUMENT_ID
         sync: false
       - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: SYNC_TOKEN
         sync: false
