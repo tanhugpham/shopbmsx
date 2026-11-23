@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 43,
+      "name": "SLOT CANVA EDU 1 NĂM",
+      "price": 30000,
+      "description": "",
+      "category_id": null,
+      "stock": 40,
+      "wholesale_tiers": [
+        {"minQuantity": 10, "unitPrice": 28000},
+        {"minQuantity": 25, "unitPrice": 26000}
+      ],
+      "accounts": [{"password": "must-not-store", "2fa": "nope"}]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "data": {
+    "product_id": "local_81",
+    "quantity": 1,
+    "unit_price": 9500,
+    "total": 9500,
+    "available_quantity": 2,
+    "can_purchase": true
+  }
+}

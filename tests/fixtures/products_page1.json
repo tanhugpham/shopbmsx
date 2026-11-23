@@ -1,0 +1,37 @@
+{
+  "data": [
+    {
+      "id": "local_81",
+      "title": "Microsoft Office 365 Family Admin 1 Tháng",
+      "in_stock": true,
+      "description": "Không được ghi sang bảng",
+      "variants": [
+        {
+          "id": "local_81",
+          "prices": { "vnd": 9500 },
+          "in_stock": true,
+          "available_quantity": 2
+        }
+      ]
+    },
+    {
+      "id": "local_82",
+      "title": "Sản phẩm thử hai",
+      "in_stock": false,
+      "variants": [
+        {
+          "id": "local_82_a",
+          "prices": { "vnd": 1000 },
+          "in_stock": false,
+          "available_quantity": 0
+        },
+        {
+          "id": "local_82_b",
+          "prices": { "vnd": 3000 },
+          "in_stock": false,
+          "available_quantity": 1
+        }
+      ]
+    }
+  ]
+}

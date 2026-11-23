@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": "local_083",
+      "title": "Sản phẩm trang hai",
+      "in_stock": true,
+      "variants": [
+        {
+          "id": "var_083",
+          "prices": { "vnd": "500" },
+          "in_stock": true,
+          "available_quantity": 4
+        }
+      ]
+    }
+  ]
+}

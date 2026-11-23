@@ -1,0 +1,42 @@
+# Blueprint Render. Key không nằm trong file này.
+# Push lên nhánh main chỉ deploy sau khi GitHub check "ci" đạt.
+services:
+  - type: cron
+    name: shopxoainon-sync-sources
+    runtime: python
+    plan: starter
+    region: singapore
+    branch: main
+    schedule: "17 1 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh scripts/render_sync.sh
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHONPATH
+        value: src
+      - key: DRY_RUN
+        value: "true"
+      - key: ENABLE_PURCHASE
+        value: "false"
+      - key: ENABLE_TELEGRAM
+        value: "false"
+      - key: SHOP_XOAI_NON_BASE_URL
+        value: https://shopxoainon.online/api/v1
+      - key: NASTELE_BASE_URL
+        value: https://nastele.online
+      - key: GOOGLE_CREDENTIALS_FILE
+        value: ./GOOGLE_CREDENTIALS_FILE.json
+      - key: SHOP_XOAI_NON_API_KEY
+        sync: false
+      - key: NASTELE_API_KEY
+        sync: false
+      - key: GOOGLE_SPREADSHEET_ID
+        sync: false
+      - key: NASTELE_SPREADSHEET_ID
+        sync: false
+      - key: LAST_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_DOCUMENT_ID
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false

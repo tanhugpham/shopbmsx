@@ -1,0 +1,30 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+
+# API key của Shop Xoài Non và Nastele chỉ nằm trong .env.
+# Khóa service account. Không ignore mọi *.json,
+# để JSON dữ liệu như tests/fixtures/*.json vẫn được theo dõi.
+GOOGLE_CREDENTIALS_FILE.json
+credentials*.json
+*service-account*.json
+*service_account*.json
+*.pem
+*.p12
+secrets/
+.google/
+backups/
+
+!tests/fixtures/*.json

@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "local_90",
+      "variants": [
+        { "id": "var_90", "in_stock": true }
+      ]
+    },
+    {
+      "title": "Không có mã",
+      "description": "bỏ qua"
+    },
+    "phần tử không hợp lệ",
+    {
+      "id": "local_91",
+      "title": "Không có biến thể",
+      "in_stock": false
+    },
+    {
+      "id": "local_92",
+      "title": "Giá lẻ",
+      "in_stock": true,
+      "variants": [
+        {
+          "id": "var_92",
+          "prices": { "vnd": 9500.5 },
+          "in_stock": true,
+          "available_quantity": 1
+        }
+      ]
+    }
+  ]
+}
