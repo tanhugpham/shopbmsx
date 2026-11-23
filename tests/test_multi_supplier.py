@@ -389,7 +389,12 @@ def test_failed_supplier_rows_are_not_marked_missing() -> None:
     assert MISSING_THIS_READ not in old
 
 
-def test_dry_run_does_not_write_and_live_write_needs_backup() -> None:
+def test_dry_run_does_not_write_and_live_write_needs_backup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # GitHub Actions luôn có GITHUB_ACTIONS=true và chặn live sync theo lịch.
+    # Test này kiểm tra nhánh backup trên máy thường; chặn Actions nằm ở test_phase421.
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     settings = make_settings(dry_run=True, google_credentials_file="", google_spreadsheet_id="sheet")
     memory = MemoryGateway()
     writer = SourceSheetWriter(memory, "sheet", dry_run=False)
