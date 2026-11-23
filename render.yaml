@@ -18,6 +18,12 @@ services:
         value: "3.13.7"
       - key: DRY_RUN
         value: "true"
+      - key: ENABLE_SCHEDULED_SYNC
+        value: "true"
+      - key: ENABLE_SCHEDULED_MENU_LIVE
+        value: "true"
+      - key: SCHEDULED_SYNC_SECONDS
+        value: "300"
       - key: ENABLE_PURCHASE
         value: "false"
       - key: ENABLE_TELEGRAM

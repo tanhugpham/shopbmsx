@@ -182,6 +182,35 @@ def test_quantity_null_absent_zero_and_optional_variant_fields_stay_distinct() -
     assert product_row["Mô tả ngắn"] == "Có mô tả"
 
 
+def test_catalog_descriptions_replace_contact_handle() -> None:
+    service = ProductService()
+    products, warnings = service.parse_many(
+        [
+            {
+                "id": "local_1",
+                "title": "Canva",
+                "in_stock": True,
+                "variants": [
+                    {
+                        "id": "v1",
+                        "prices": {"vnd": 79000},
+                        "in_stock": True,
+                        "description": "Inbox @tiensky123 và @tiensky1234.",
+                    }
+                ],
+            }
+        ]
+    )
+    assert warnings == []
+    assert products[0].variants[0].description == "Inbox @admin và @tiensky1234."
+    product_row = service.build_product_records(products, "t")[0]
+    variant_row = service.build_variant_records(products, "t")[0]
+    assert product_row["Mô tả ngắn"] == "Inbox @admin và @tiensky1234."
+    assert variant_row["Mô tả"] == "Inbox @admin và @tiensky1234."
+    assert "@tiensky1234" in str(variant_row["Mô tả gốc"])
+    assert "Inbox @admin" in str(variant_row["Mô tả gốc"])
+
+
 def test_missing_variant_text_is_explicit_and_product_description_is_ignored() -> None:
     from shop_integration.product_service import VARIANT_HEADERS, resolve_variant_headers
 

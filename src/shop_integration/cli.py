@@ -96,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync_sources.set_defaults(func=command_sync_sources)
 
+    sync_menu = commands.add_parser(
+        "sync-menu",
+        help="Đồng bộ nguồn vào MENU. Chỉ ghi ô sản phẩm. DRY_RUN không ghi.",
+    )
+    sync_menu.set_defaults(func=command_sync_menu)
+
     report = commands.add_parser("report", help="In báo cáo và ghi vào Google Doc khi không chạy thử")
     report.set_defaults(func=command_report)
 
@@ -355,6 +361,15 @@ def command_sources(args: argparse.Namespace, settings: Settings) -> int:
 def command_sync_sources(args: argparse.Namespace, settings: Settings) -> int:
     del args
     return _source_command(settings, write_sheets=True)
+
+
+def command_sync_menu(args: argparse.Namespace, settings: Settings) -> int:
+    del args
+    from shop_integration.menu_sync import run_menu_sync
+
+    result = run_menu_sync(settings, live=not settings.dry_run)
+    print(result.text)
+    return 0 if result.status in {"ok", "locked", "partial"} else 1
 
 
 def _source_command(settings: Settings, *, write_sheets: bool) -> int:

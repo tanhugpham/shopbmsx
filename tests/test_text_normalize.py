@@ -77,6 +77,8 @@ def test_sanitize_replaces_contact_handle_only() -> None:
         "Inbox admin @admin để nhận mã yêu cầu. Nhắc @admin nếu chậm."
     )
     assert sanitize_public_text("Inbox @tiensky1234 và @tiensky123.") == "Inbox @tiensky1234 và @admin."
+    assert sanitize_public_text("Inbox @Tiensky123 ngay.") == "Inbox @admin ngay."
+    assert sanitize_public_text("Inbox @tien\u200bsky123 ngay.") == "Inbox @admin ngay."
     assert sanitize_public_text("Giá 203000 — bảo hành BHF 😀") == "Giá 203000 — bảo hành BHF 😀"
     assert sanitize_public_text(203000) == 203000
     assert sanitize_public_text("") == ""

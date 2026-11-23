@@ -11,7 +11,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from shop_integration.config import PROJECT_ROOT, Settings
-from shop_integration.logging_utils import redact
+from shop_integration.logging_utils import configure_logging, redact
+from shop_integration.menu_sync import (
+    run_menu_sync,
+    scheduled_menu_live,
+    scheduler_status,
+    start_menu_scheduler,
+)
 
 
 def apply_runtime_guards() -> None:
@@ -53,6 +59,7 @@ def health_body() -> bytes:
         "dry_run": True,
         "enable_purchase": False,
         "sync_token_configured": bool(sync_token()),
+        "scheduled_sync": scheduler_status(),
     }
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -106,6 +113,21 @@ class SyncHandler(BaseHTTPRequestHandler):
             body = (text + "\n") if text else f"exit {code}\n"
             self._send(status, "text/plain; charset=utf-8", body.encode("utf-8"))
             return
+        if path == "/sync-menu":
+            if not request_authorized(dict(self.headers)):
+                self._send(403, "text/plain; charset=utf-8", b"Thieu SYNC_TOKEN.\n")
+                return
+            try:
+                apply_runtime_guards()
+                materialize_google_credentials()
+                result = run_menu_sync(Settings(), live=scheduled_menu_live())
+            except Exception:
+                self._send(500, "text/plain; charset=utf-8", b"menu-sync loi. Xem log Render.\n")
+                return
+            status = 200 if result.status in {"ok", "locked", "partial"} else 500
+            body = (result.text + "\n").encode("utf-8")
+            self._send(status, "text/plain; charset=utf-8", body)
+            return
         self._send(404, "text/plain; charset=utf-8", b"Not found.\n")
 
     def _send(self, status: int, content_type: str, body: bytes) -> None:
@@ -120,6 +142,9 @@ class SyncHandler(BaseHTTPRequestHandler):
 def serve() -> None:
     apply_runtime_guards()
     materialize_google_credentials()
+    settings = Settings()
+    configure_logging(settings.secret_values())
+    start_menu_scheduler()
     port = int(os.environ.get("PORT", "10000"))
     server = ThreadingHTTPServer(("0.0.0.0", port), SyncHandler)
     sys.stderr.write(f"shopxoainon web listening on {port}\n")

@@ -1,0 +1,42 @@
+name: sync-menu
+
+# Lịch 5 phút: fetch nguồn, sanitize Description, cập nhật MENU.
+# Không tạo đơn. Không ghi đè Category Header. Không commit dữ liệu.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync-menu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Write Google credentials from secret
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: |
+          if [ -n "$GOOGLE_CREDENTIALS_JSON" ]; then
+            printf '%s' "$GOOGLE_CREDENTIALS_JSON" > GOOGLE_CREDENTIALS_FILE.json
+          fi
+      - name: Sync MENU
+        env:
+          PYTHONPATH: src
+          DRY_RUN: "false"
+          ENABLE_PURCHASE: "false"
+          ENABLE_TELEGRAM: "false"
+          ENABLE_SCHEDULED_MENU_LIVE: "true"
+          SHOP_XOAI_NON_API_KEY: ${{ secrets.SHOP_XOAI_NON_API_KEY }}
+          NASTELE_API_KEY: ${{ secrets.NASTELE_API_KEY }}
+          GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+          NASTELE_SPREADSHEET_ID: ${{ secrets.NASTELE_SPREADSHEET_ID }}
+          LAST_SPREADSHEET_ID: ${{ secrets.LAST_SPREADSHEET_ID }}
+          GOOGLE_DOCUMENT_ID: ${{ secrets.GOOGLE_DOCUMENT_ID }}
+          GOOGLE_CREDENTIALS_FILE: ./GOOGLE_CREDENTIALS_FILE.json
+        run: python -m shop_integration sync-menu

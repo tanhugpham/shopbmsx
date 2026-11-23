@@ -782,6 +782,22 @@ def test_menu_stock_and_status_follow_source() -> None:
     assert "@admin" in str(office_row["DESCRIPTION"])
 
 
+def test_existing_menu_description_is_sanitized_even_if_product_is_not_in_source() -> None:
+    grid = _menu_storefront()
+    grid[10][2] = "Inbox @tiensky123 và @tiensky1234."
+    gateway = _menu_book(grid)
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows(_products()[:1]),
+        dry_run=False,
+    )
+    row = gateway.values[TAB_MENU][10]
+    assert row[0] == "AI-01"
+    assert row[1] == "Claude"
+    assert row[2] == "Inbox @admin và @tiensky1234."
+    assert gateway.values[TAB_MENU][6][0] == "🤖 SHOP XOÀI NON"
+    assert gateway.values[TAB_MENU][9][0] == "🤖 AI ACCOUNTS"
+
+
 def test_category_headers_are_detected_by_structure() -> None:
     grid = _menu_storefront()
     regions = parse_menu_regions(grid, 5)

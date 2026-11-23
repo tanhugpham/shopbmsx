@@ -18,7 +18,7 @@ from shop_integration.errors import ConfigError
 from shop_integration.models import Product
 from shop_integration.pricing import PricingPolicy, quote_cost, round_pretty_vnd
 from shop_integration.product_service import MISSING_TEXT, variant_stock_label
-from shop_integration.text_normalize import guard_formula, sanitize_public_text, shorten_text
+from shop_integration.text_normalize import guard_formula, public_description, shorten_text
 
 TAB_MANUAL = "NASTELEID"
 TAB_AUTO = "BAO_GIA"
@@ -376,8 +376,7 @@ def _customer_description(value: object, fallback: str) -> str:
 
 
 def _public_description(value: object) -> str:
-    cleaned = sanitize_public_text(value)
-    return cleaned if isinstance(cleaned, str) else str(value or "")
+    return public_description(value)
 
 
 def _menu_stock(status_label: str, quantity: object) -> Any:
@@ -733,11 +732,12 @@ def _sanitize_existing_menu_descriptions(
     cells: list[tuple[str, Any]],
     locked: set[int],
 ) -> None:
+    del locked
     pending = {cell_range for cell_range, _value in cells}
     for row_number, raw in enumerate(grid[header_index + 1 :], start=header_index + 2):
-        if row_number in locked or not is_menu_product_row(raw):
-            continue
         current = _at(raw, 2)
+        if _blank(current):
+            continue
         cleaned = _public_description(current)
         if _same(current, cleaned):
             continue
@@ -1283,7 +1283,7 @@ def _records_from_grid(
         variant = _at(raw, index.get("Tên biến thể"))
         if _blank(variant):
             variant = _at(raw, index.get("Cấu hình"))
-        description = _at(raw, index.get("Mô tả"))
+        description = _public_description(_at(raw, index.get("Mô tả")))
         rows.append(
             {
                 "STT": int(serial) if serial.isdigit() else offset,

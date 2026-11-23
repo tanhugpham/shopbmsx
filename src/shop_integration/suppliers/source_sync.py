@@ -17,6 +17,7 @@ from shop_integration.errors import ConfigError, IntegrationError, PartialSyncEr
 from shop_integration.logging_utils import redact
 from shop_integration.pricing import PricingPolicy, policy_from_settings, quote_cost
 from shop_integration.product_service import ABSENT_LABEL, MISSING_TEXT, NULL_LABEL
+from shop_integration.text_normalize import public_description
 from shop_integration.sheet_layout import (
     ALL_TABS,
     SheetTable,
@@ -306,7 +307,9 @@ def customer_rows_from_comparison(
             {
                 "Canonical Product ID": canonical,
                 "Product Name": item.get("Product Name") or old.get("Product Name") or MISSING_TEXT,
-                "Product Description": item.get("Product Description") or old.get("Product Description") or MISSING_TEXT,
+                "Product Description": public_description(
+                    item.get("Product Description") or old.get("Product Description") or MISSING_TEXT
+                ),
                 "Selling Price": "" if selling is None else selling,
                 "Availability": availability,
                 "Updated At": updated_at,
@@ -986,10 +989,10 @@ def _group_name(group: list[NormalizedOffer], choice: SourceChoice) -> str:
 
 def _group_description(group: list[NormalizedOffer], choice: SourceChoice) -> str:
     if choice.selected is not None and choice.selected.description:
-        return choice.selected.description
+        return public_description(choice.selected.description)
     for offer in group:
         if offer.description:
-            return offer.description
+            return public_description(offer.description)
     return MISSING_TEXT
 
 

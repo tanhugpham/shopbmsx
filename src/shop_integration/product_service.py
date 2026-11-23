@@ -7,7 +7,7 @@ from typing import Any
 from shop_integration.models import CatalogSummary, ParseWarning, Product, Variant
 from shop_integration.money import MoneyFormatError, parse_optional_count, parse_vnd
 from shop_integration.pricing import PricingPolicy, quote_cost
-from shop_integration.text_normalize import normalize_text, shorten_text
+from shop_integration.text_normalize import normalize_text, public_description, sanitize_public_text, shorten_text
 
 MISSING_TEXT = "Chưa có dữ liệu"
 SHORT_DESCRIPTION_LIMIT = 180
@@ -173,7 +173,8 @@ def short_description(product: Product) -> str:
     if len(unique) != 1:
         return MISSING_TEXT
     shortened = shorten_text(unique[0], SHORT_DESCRIPTION_LIMIT)
-    return shortened or MISSING_TEXT
+    cleaned = public_description(shortened)
+    return cleaned or MISSING_TEXT
 
 
 class ProductService:
@@ -459,7 +460,10 @@ def _blank_money(value: int | None) -> int | str:
 def _cleaned_text(presence: str, raw: str | None, *, multiline: bool) -> str | None:
     if presence != "value" or raw is None:
         return None
-    return normalize_text(raw, multiline=multiline) or None
+    text = normalize_text(raw, multiline=multiline)
+    if not text:
+        return None
+    return public_description(text) or None
 
 
 def _display_text(presence: str, cleaned: str | None) -> str:
@@ -470,7 +474,8 @@ def _display_text(presence: str, cleaned: str | None) -> str:
 
 def _raw_cell(presence: str, raw: str | None) -> str:
     if presence == "value" and isinstance(raw, str):
-        return raw
+        cleaned = sanitize_public_text(raw)
+        return cleaned if isinstance(cleaned, str) else raw
     return ""
 
 

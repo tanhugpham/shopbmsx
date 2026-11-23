@@ -20,7 +20,7 @@ from shop_integration.sheet_layout import (
     stamp_stt,
 )
 from shop_integration.suppliers.models import SUPPLIER_NASTELE, NormalizedOffer
-from shop_integration.text_normalize import FORMULA_PREFIX, guard_formula
+from shop_integration.text_normalize import FORMULA_PREFIX, guard_formula, public_description
 
 TAB_PRODUCTS = "NASTELE_SAN_PHAM"
 TAB_TIERS = "NASTELE_GIA_SI"
@@ -421,7 +421,7 @@ def _product_row(offer: NormalizedOffer, updated_at: str) -> dict[str, Any]:
     return {
         "Product ID": offer.source_product_id,
         "Product Name": offer.normalized_product_name or MISSING_TEXT,
-        "Description": offer.description or MISSING_TEXT,
+        "Description": public_description(offer.description) or MISSING_TEXT,
         "Category ID": offer.category_id or MISSING_TEXT,
         "Retail Cost (VND)": offer.cost_price_vnd if offer.cost_price_vnd is not None else "",
         "Stock Quantity": stock,

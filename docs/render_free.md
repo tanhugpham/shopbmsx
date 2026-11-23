@@ -67,7 +67,20 @@ Invoke-WebRequest -Uri "https://shopxoainon-web.onrender.com/sync-sources" -Meth
 
 Không có token → HTTP 403. Lệnh này **không ghi Google** (`DRY_RUN=true` bị khóa trong code).
 
-## C. Lịch chạy miễn phí: GitHub Actions
+## C. Lịch MENU 5 phút
+
+Render Free không có Cron (Cron là gói trả phí). Không bật dịch vụ trả phí.
+
+Hai lớp, cùng một lệnh `sync-menu`:
+
+1. Thread trong Web Service `shopxoainon-web` chạy mỗi 300 giây khi instance đang thức. Ghi **ô Description/sản phẩm MENU**, không tắt khóa mua hàng. `DRY_RUN=true` vẫn giữ cho catalog; `ENABLE_SCHEDULED_MENU_LIVE=true` cho phép ghi MENU.
+2. GitHub Actions `.github/workflows/sync-menu.yml` cron `*/5 * * * *` chạy `python -m shop_integration sync-menu`. Đây là đồng hồ miễn phí khi Free instance ngủ sau 15 phút không có HTTP.
+
+Cần secret `LAST_SPREADSHEET_ID` trên GitHub Actions. Không dùng `setInterval` trình duyệt. Không ping liên tục để giả Cron.
+
+Workflow `.github/workflows/sync-sources.yml` vẫn đọc nguồn mỗi ngày, DRY_RUN.
+
+## C2. Lịch đọc nguồn hàng ngày
 
 Không cần Render Cron. Workflow `.github/workflows/sync-sources.yml` chạy `17 1 * * *` UTC.
 

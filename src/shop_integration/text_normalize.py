@@ -65,7 +65,11 @@ def normalize_text(value: object, *, multiline: bool = True) -> str:
 
 CONTACT_HANDLE = "@tiensky123"
 CONTACT_REPLACEMENT = "@admin"
-_CONTACT_HANDLE = re.compile(r"@tiensky123(?![\w])")
+_ZW = r"[\u200b\u200c\u200d\ufeff]*"
+_CONTACT_HANDLE = re.compile(
+    rf"@{_ZW}t{_ZW}i{_ZW}e{_ZW}n{_ZW}s{_ZW}k{_ZW}y{_ZW}1{_ZW}2{_ZW}3(?![\w])",
+    re.IGNORECASE,
+)
 
 
 def sanitize_public_text(value: object) -> object:
@@ -74,6 +78,20 @@ def sanitize_public_text(value: object) -> object:
     if not isinstance(value, str) or value == "":
         return value
     return _CONTACT_HANDLE.sub(CONTACT_REPLACEMENT, value)
+
+
+def public_description(value: object) -> str:
+    """Chuỗi mô tả public: luôn đi qua sanitize_public_text."""
+
+    text = value if isinstance(value, str) else str(value or "")
+    cleaned = sanitize_public_text(text)
+    return cleaned if isinstance(cleaned, str) else text
+
+
+def contains_contact_handle(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return _CONTACT_HANDLE.search(value) is not None
 
 
 def shorten_text(value: object, limit: int = 180) -> str:

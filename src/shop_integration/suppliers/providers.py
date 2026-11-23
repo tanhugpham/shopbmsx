@@ -15,7 +15,7 @@ from shop_integration.suppliers.models import (
     ProviderResult,
     WholesaleTier,
 )
-from shop_integration.text_normalize import decode_escaped_whitespace, normalize_text
+from shop_integration.text_normalize import decode_escaped_whitespace, normalize_text, public_description
 
 NO_VARIANT = "API không có biến thể"
 
@@ -266,7 +266,7 @@ def safe_fetch(provider: Any) -> ProviderResult:
 
 
 def _clean(value: object, *, multiline: bool) -> str:
-    return normalize_text(decode_escaped_whitespace(value), multiline=multiline)
+    return public_description(normalize_text(decode_escaped_whitespace(value), multiline=multiline))
 
 
 def _nastele_id(value: object) -> str | None:

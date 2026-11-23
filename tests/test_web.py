@@ -80,6 +80,16 @@ def test_request_authorized_accepts_bearer(monkeypatch) -> None:
     assert request_authorized({"X-Sync-Token": "wrong"}) is False
 
 
+def test_sync_menu_without_token_is_forbidden(monkeypatch) -> None:
+    monkeypatch.delenv("SYNC_TOKEN", raising=False)
+    server, base = _server()
+    try:
+        response = httpx.post(f"{base}/sync-menu", timeout=5)
+    finally:
+        server.shutdown()
+    assert response.status_code == 403
+
+
 def test_unknown_path_is_404() -> None:
     server, base = _server()
     try:
