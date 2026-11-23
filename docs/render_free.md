@@ -22,7 +22,7 @@ Cron job trên Render cần gói trả phí. Free chỉ có **Web Service**. L�
 | Branch | `main` |
 | Runtime | Python |
 | Build Command | `pip install -r requirements.txt` |
-| Start Command | `python -m shop_integration.web` |
+| Start Command | `PYTHONPATH=src python scripts/start_web.py` |
 | Instance type | **Free** |
 
 5. **Advanced → Add Environment Variable**, lần lượt:
@@ -79,6 +79,6 @@ Chia sẻ quyền **Người chỉnh sửa** email service account (`client_emai
 | Hiện tượng | Việc làm |
 | --- | --- |
 | Render hỏi thẻ / Starter | Quay lại, chọn **Free** instance. Đừng dùng Blueprint Cron. |
-| Health 502 | Xem log: Start Command phải là `python -m shop_integration.web` |
-| `ModuleNotFoundError: shop_integration` | Thiếu `PYTHONPATH=src` |
+| Health 502 | Xem log: Start Command phải là `PYTHONPATH=src python scripts/start_web.py` |
+| `ModuleNotFoundError: shop_integration` | Sửa Start Command thành `PYTHONPATH=src python scripts/start_web.py`. Thêm biến `PYTHONPATH` = `src`. Manual Deploy lại. |
 | CI GitHub đỏ | Sửa test trước. `autoDeployTrigger: checksPass` không deploy commit fail |

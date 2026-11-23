@@ -255,7 +255,8 @@ def test_workflow_stays_read_only() -> None:
     assert "type: web" in blueprint
     assert "plan: free" in blueprint
     assert "type: cron" not in blueprint
-    assert "shop_integration.web" in blueprint
+    assert "scripts/start_web.py" in blueprint
+    assert "PYTHONPATH=src" in blueprint
     assert 'value: "true"' in blueprint
     assert "checksPass" in blueprint
     assert "sync: false" in blueprint

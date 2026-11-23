@@ -203,7 +203,7 @@ Test dùng HTTP giả lập và gateway Google trong bộ nhớ. Chúng không c
 
 ## 10. Render miễn phí
 
-Cron Render cần thẻ. Dùng **New → Web Service**, instance **Free**. Start command: `python -m shop_integration.web`. Lịch chạy dùng GitHub Actions. Bảng bấm từng bước: [render_free.md](render_free.md).
+Cron Render cần thẻ. Dùng **New → Web Service**, instance **Free**. Start command: `PYTHONPATH=src python scripts/start_web.py`. Lịch chạy dùng GitHub Actions. Bảng bấm từng bước: [render_free.md](render_free.md).
 
 ## 11. Khi gặp lỗi
 

@@ -5,7 +5,11 @@ from threading import Thread
 import httpx
 from http.server import ThreadingHTTPServer
 
+from pathlib import Path
+
 from shop_integration.web import SyncHandler, apply_runtime_guards, request_authorized
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _server() -> tuple[ThreadingHTTPServer, str]:
@@ -83,3 +87,9 @@ def test_unknown_path_is_404() -> None:
     finally:
         server.shutdown()
     assert response.status_code == 404
+
+
+def test_render_launcher_adds_src() -> None:
+    text = (ROOT / "scripts" / "start_web.py").read_text(encoding="utf-8")
+    assert "sys.path.insert" in text
+    assert (ROOT / "src" / "shop_integration" / "web.py").is_file()

@@ -8,7 +8,7 @@ services:
     region: singapore
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m shop_integration.web
+    startCommand: PYTHONPATH=src python scripts/start_web.py
     healthCheckPath: /health
     autoDeployTrigger: checksPass
     envVars:
