@@ -80,7 +80,8 @@ class GoogleSheetsGateway:
                 fields=(
                     "sheets.properties(sheetId,title),"
                     "sheets.bandedRanges(bandedRangeId),"
-                    "sheets.conditionalFormats"
+                    "sheets.conditionalFormats,"
+                    "sheets.merges"
                 ),
             )
             .execute(),
@@ -100,12 +101,18 @@ class GoogleSheetsGateway:
                 if isinstance(band, dict) and isinstance(band.get("bandedRangeId"), int):
                     banding_ids.append(band["bandedRangeId"])
             rules = sheet.get("conditionalFormats", [])
+            merges = [
+                merge
+                for merge in (sheet.get("merges") or [])
+                if isinstance(merge, dict)
+            ]
             found.append(
                 {
                     "title": title,
                     "sheetId": sheet_id,
                     "bandingIds": banding_ids,
                     "conditionalFormatCount": len(rules) if isinstance(rules, list) else 0,
+                    "merges": merges,
                 }
             )
         return found

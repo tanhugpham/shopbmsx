@@ -63,6 +63,19 @@ def normalize_text(value: object, *, multiline: bool = True) -> str:
     return compact
 
 
+CONTACT_HANDLE = "@tiensky123"
+CONTACT_REPLACEMENT = "@admin"
+_CONTACT_HANDLE = re.compile(r"@tiensky123(?![\w])")
+
+
+def sanitize_public_text(value: object) -> object:
+    """Đổi @tiensky123 thành @admin. Giữ nguyên phần còn lại, emoji và tiếng Việt."""
+
+    if not isinstance(value, str) or value == "":
+        return value
+    return _CONTACT_HANDLE.sub(CONTACT_REPLACEMENT, value)
+
+
 def shorten_text(value: object, limit: int = 180) -> str:
     """Cắt để làm mô tả ngắn. Không thay từ."""
 

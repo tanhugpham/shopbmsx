@@ -14,47 +14,52 @@ python -m shop_integration quote-layout
 | File | Biến môi trường | Tab liên quan | Ai ghi | Bạn làm gì |
 | --- | --- | --- | --- | --- |
 | Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`, `LICH_SU_GIA`, `NHAT_KY_DONG_BO`, `CAU_HINH` | Tool ghi khi `sync` | Xem giá gốc, tồn kho, cấu hình nội bộ. Không copy sang file tổng hợp. |
-| Báo giá tổng hợp | `LAST_SPREADSHEET_ID` | `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | Người dùng chỉ sửa `NASTELEID`. Tool ghi `BAO_GIA` và `BAO_GIA_TONG_HOP` khi `sync` hoặc `report` | Nhập Nastele tay trên `NASTELEID`. Xem bảng khách trên `BAO_GIA_TONG_HOP`. |
+| Báo giá chính thức | `LAST_SPREADSHEET_ID` | `MENU`, `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | `MENU` là bảng khách. Tool ghi `MENU`, `BAO_GIA`, `BAO_GIA_TONG_HOP`. Catalog Nastele ghi vào `NASTELEID` khi API có hàng | Xem giá khách trên `MENU`. Không sửa cột A–H của `MENU`. |
 
 File tổng hợp để trống `LAST_SPREADSHEET_ID` thì lệnh bỏ qua, không tạo file mới.
 
-## Cột thống nhất trên file tổng hợp
+## Cột khóa trên NASTELEID và BAO_GIA
 
-Dòng 1 của **cả ba tab** phải cùng bộ cột này. Có thể thêm cột phụ bên phải (`Ghi chú`, màu). Tool không xóa cột phụ.
+Hai tab dùng **cùng một dòng 1**. Tool khóa định dạng (header, đóng băng, khổ cột, số tiền). Có thể thêm cột phụ từ cột H trở đi.
 
-| Cột | Bắt buộc | NASTELEID (nhập tay) | BAO_GIA (tool) | BAO_GIA_TONG_HOP (tool) |
-| --- | --- | --- | --- | --- |
-| Nguồn | Có trên `BAO_GIA` và tổng hợp | Điền `NASTELEID` hoặc để trống. Không điền `Shop Xoài Non`. | Luôn là `Shop Xoài Non`. | Copy nguyên từ nguồn gốc. |
-| Mã | Có | Mã Nastele, ví dụ `43`. Cột cũ `Nastele ID` vẫn đọc được. | `product_id\|variant_id`, ví dụ `local_81\|local_81`. | Copy nguyên. Không dùng `Product ID` của `SAN_PHAM`. |
-| Tên sản phẩm | Có | Tên hiển thị cho khách. | Tên shop, ghép biến thể khi khác tên sản phẩm. | Copy nguyên từng nguồn. |
-| Giá bán | Có | Giá đã bán, giữ nguyên số đã gõ. Không lấy giá gốc. | Giá shop đã cộng lợi nhuận rồi làm tròn đẹp. | Copy nguyên. Không tính lại, không chọn nguồn rẻ. |
-| Tình trạng | Có | `Còn hàng` / `Hết hàng` / `Chưa có dữ liệu`. | `Còn hàng` / `Hết hàng` / nhãn API shop. | Copy nguyên từng nguồn. |
-| Cấu hình | Không | Gói, thời hạn. Không dán HTML thô. | Mô tả biến thể đã chuẩn hóa. | Copy nguyên từng nguồn. |
+| Cột | BAO_GIA (API shop) | NASTELEID (nhập tay) |
+| --- | --- | --- |
+| STT | 1, 2, 3… theo thứ tự catalog. Không lấy `local_…`. | 1, 2, 3… do bạn đánh. |
+| Nguồn | `Shop Xoài Non` | `NASTELEID` hoặc để trống |
+| Tên sản phẩm | `title` sản phẩm | Tên khách thấy |
+| Tên biến thể | `title` biến thể | Gói / thời hạn |
+| Mô tả | `description` biến thể | Mô tả tay |
+| Giá bán | Giá đã + lợi nhuận, làm tròn đẹp | Giá đã gõ, không làm tròn lại |
+| Tình trạng | Còn hàng / Hết hàng | Còn hàng / Hết hàng / Chưa có dữ liệu |
 
 ## Mẫu dòng NASTELEID
 
-| Nguồn | Mã | Tên sản phẩm | Giá bán | Tình trạng | Cấu hình |
-| --- | --- | --- | --- | --- | --- |
-| NASTELEID | 43 | Canva Pro 1 năm | 102700 | Còn hàng | Gói năm |
+| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | NASTELEID | Canva Pro | Gói năm | Học sinh | 102700 | Còn hàng |
 
-Tool chỉ đọc tab này. Không tạo tab, không ghi ô, không xóa dòng, không đổi định dạng.
+Tool khóa dòng 1 và định dạng. Không ghi dữ liệu từ dòng 2.
 
 ## Mẫu dòng BAO_GIA (tool ghi)
 
-| Nguồn | Mã | Tên sản phẩm | Giá bán | Tình trạng | Cấu hình |
-| --- | --- | --- | --- | --- | --- |
-| Shop Xoài Non | local_cg\|v1 | ChatGPT — Plus | 203000 | Còn hàng | API mô tả |
+| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Shop Xoài Non | ChatGPT | Plus | API mô tả | 203000 | Còn hàng |
 
-Không sửa tay các cột chuẩn trên tab này. Cột phụ bên phải được giữ.
+Không sửa tay các cột A–G. Không có `local_id`.
 
 ## Mẫu dòng BAO_GIA_TONG_HOP (tool ghi)
 
-| Nguồn | Mã | Tên sản phẩm | Giá bán | Tình trạng | Cấu hình |
-| --- | --- | --- | --- | --- | --- |
-| NASTELEID | 43 | Canva Pro 1 năm | 102700 | Còn hàng | Gói năm |
-| Shop Xoài Non | local_cg\|v1 | ChatGPT — Plus | 203000 | Còn hàng | API mô tả |
+| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | NASTELEID | Canva Pro | Gói năm | Học sinh | 102700 | Còn hàng |
+| 1 | Shop Xoài Non | ChatGPT | Plus | API mô tả | 203000 | Còn hàng |
 
 Hai nguồn xếp chồng. Giá Nastele giữ nguyên như đã gõ. Giá shop giữ giá đã làm tròn trên `BAO_GIA`.
+
+## MENU (bảng khách)
+
+Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@admin`.
 
 ## Không copy từ file catalog
 

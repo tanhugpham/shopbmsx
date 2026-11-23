@@ -1321,7 +1321,13 @@ def formula_prefix() -> str:
 def collect_suppliers(settings: Settings, updated_at: str) -> tuple[ProviderResult, ProviderResult]:
     """Đọc từng nhà cung cấp riêng. Lỗi của một bên không xóa kết quả bên kia."""
 
-    return _collect_shop(settings, updated_at), _collect_nastele(settings, updated_at)
+    return _collect_shop(settings, updated_at), collect_nastele(settings, updated_at)
+
+
+def collect_nastele(settings: Settings, updated_at: str) -> ProviderResult:
+    """Đọc catalog Nastele. Catalog rỗng không được hiểu là đã xóa hết sản phẩm."""
+
+    return _collect_nastele(settings, updated_at)
 
 
 def _collect_shop(settings: Settings, updated_at: str) -> ProviderResult:

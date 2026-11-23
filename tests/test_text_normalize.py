@@ -5,6 +5,7 @@ from shop_integration.text_normalize import (
     decode_escaped_whitespace,
     guard_formula,
     normalize_text,
+    sanitize_public_text,
     shorten_text,
 )
 
@@ -63,3 +64,19 @@ def test_shorten_keeps_words_and_formula_guard_is_stable() -> None:
     assert guard_formula("- mô tả") == FORMULA_PREFIX + "- mô tả"
     assert guard_formula("Cà phê 😀") == "Cà phê 😀"
     assert guard_formula(9500) == 9500
+
+
+def test_sanitize_replaces_contact_handle_only() -> None:
+    text = (
+        "Định dạng: Email | Mật khẩu | 2FA\n"
+        "Inbox admin @tiensky123 để nhận mã yêu cầu. Nhắc @tiensky123 nếu chậm."
+    )
+    cleaned = sanitize_public_text(text)
+    assert cleaned == (
+        "Định dạng: Email | Mật khẩu | 2FA\n"
+        "Inbox admin @admin để nhận mã yêu cầu. Nhắc @admin nếu chậm."
+    )
+    assert sanitize_public_text("Inbox @tiensky1234 và @tiensky123.") == "Inbox @tiensky1234 và @admin."
+    assert sanitize_public_text("Giá 203000 — bảo hành BHF 😀") == "Giá 203000 — bảo hành BHF 😀"
+    assert sanitize_public_text(203000) == 203000
+    assert sanitize_public_text("") == ""

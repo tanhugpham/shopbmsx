@@ -8,7 +8,7 @@ from typing import Any
 
 from shop_integration.api_client import ShopApiClient
 from shop_integration.backup_service import BackupService
-from shop_integration.combined_quote import CombinedQuoteWriter, shop_quote_rows
+from shop_integration.combined_quote import CombinedQuoteWriter, nastele_quote_rows, shop_quote_rows
 from shop_integration.config import Settings
 from shop_integration.docs_service import REPORT_END, DocsService
 from shop_integration.errors import BackupError, ConfigError, GoogleWorkspaceError, PartialSyncError
@@ -313,14 +313,31 @@ class SyncService:
             gateway = self._sheets.gateway
         if gateway is None:
             return "Bỏ qua báo giá tổng hợp vì chưa có kết nối Google Sheets."
+        nastele_rows, nastele_note = self._nastele_quote_rows(policy)
         try:
             result = CombinedQuoteWriter(gateway, spreadsheet_id).update(
                 shop_quote_rows(products, policy),
                 dry_run=self._settings.dry_run,
+                nastele_rows=nastele_rows,
             )
+        except Exception as extra:
+            return f"Báo giá tổng hợp chưa ghi được. Chi tiết: {extra}"
+        notes = [nastele_note, result.note(dry_run=self._settings.dry_run)]
+        return " ".join(part for part in notes if part)
+
+    def _nastele_quote_rows(self, policy: PricingPolicy) -> tuple[list[dict] | None, str]:
+        from shop_integration.suppliers.source_sync import collect_nastele
+        from shop_integration.time_utils import format_timestamp
+
+        try:
+            result = collect_nastele(self._settings, format_timestamp(self._clock()))
         except Exception as exc:
-            return f"Báo giá tổng hợp chưa ghi được. Chi tiết: {exc}"
-        return result.note(dry_run=self._settings.dry_run)
+            return None, f"Không đọc được Nastele cho MENU. Chi tiết: {exc}"
+        if result.blocked or result.error:
+            return None, result.error or "Bỏ qua Nastele vì thiếu cấu hình."
+        if result.catalog_status == "NASTELE_CATALOG_EMPTY" or not result.offers:
+            return None, "Catalog Nastele rỗng. Giữ NASTELEID hiện có. Không xóa dòng tay."
+        return nastele_quote_rows(result.offers, policy), ""
 
     def _ensure_backup(self) -> None:
         if self._backup is None:

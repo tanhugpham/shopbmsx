@@ -194,11 +194,11 @@ Logger `httpx`, `httpcore` và `googleapiclient` bị đặt mức WARNING để
 
 ## Báo giá tổng hợp — UI thống nhất
 
-File `LAST_SPREADSHEET_ID` tách khỏi catalog `GOOGLE_SPREADSHEET_ID`. Ba tab `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` dùng cùng cột: `Nguồn`, `Mã`, `Tên sản phẩm`, `Giá bán`, `Tình trạng`, `Cấu hình`.
+File `LAST_SPREADSHEET_ID` tách khỏi catalog `GOOGLE_SPREADSHEET_ID`. `NASTELEID` và `BAO_GIA` khóa cùng cột: `STT`, `Nguồn`, `Tên sản phẩm`, `Tên biến thể`, `Mô tả`, `Giá bán`, `Tình trạng`. `STT` là số thứ tự, không lấy local id API. `Mô tả` lấy `description` biến thể.
 
-`NASTELEID` do người dùng nhập. Tool chỉ đọc. Cột khóa là `Mã`; cột cũ `Nastele ID` vẫn được đọc. Dòng có `Nguồn` khác `NASTELEID` bị bỏ, để không kéo giá shop hay giá vốn vào phần nhập tay. Cột giá vốn (`Giá gốc`, `Retail Cost (VND)`, …) không được map sang `Giá bán`.
+`NASTELEID` do người dùng nhập. Tool chỉ tạo/khóa dòng tiêu đề và định dạng, không ghi dữ liệu. Dòng có `Nguồn` khác `NASTELEID` bị bỏ. Cột giá vốn không map sang `Giá bán`.
 
-`BAO_GIA` nhận giá shop đã cộng lợi nhuận rồi làm tròn đẹp. `BAO_GIA_TONG_HOP` xếp chồng hai nguồn, không chọn nguồn rẻ hơn. Ghi bằng `RAW`, không đổi định dạng, không xóa dòng, không ghi `NASTELEID`.
+`BAO_GIA` nhận giá shop đã cộng lợi nhuận rồi làm tròn đẹp. `BAO_GIA_TONG_HOP` xếp chồng hai nguồn, không chọn nguồn rẻ hơn. Mỗi lần chạy khóa lại header, đóng băng dòng 1 và khổ cột.
 
 Bảng cột đầy đủ nằm ở `docs/bao_gia_tong_hop.md`. Lệnh `quote-layout` in cùng các bảng đó, không gọi mạng.
 

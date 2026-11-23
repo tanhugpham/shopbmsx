@@ -169,14 +169,14 @@ Hai file Google tách nhau. Không copy dòng từ file catalog sang file tổng
 | Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`. Nội bộ, có giá gốc. |
 | Báo giá tổng hợp | `LAST_SPREADSHEET_ID` | `NASTELEID` (sửa tay), `BAO_GIA` (tool), `BAO_GIA_TONG_HOP` (tool). |
 
-Ba tab file tổng hợp dùng **cùng một dòng tiêu đề**:
+`NASTELEID` và `BAO_GIA` khóa **cùng một dòng tiêu đề**. ID là `STT`, không lấy `local_id` API.
 
-| Nguồn | Mã | Tên sản phẩm | Giá bán | Tình trạng | Cấu hình |
-| --- | --- | --- | --- | --- | --- |
-| `NASTELEID` hoặc trống | mã Nastele, ví dụ `43` | tên khách thấy | giá đã bán, số nguyên VND | `Còn hàng` / `Hết hàng` | gói, thời hạn |
-| `Shop Xoài Non` | `product_id\|variant_id` | tên + biến thể | giá đã làm tròn đẹp | tool ghi | mô tả biến thể |
+| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `NASTELEID` | tên khách thấy | gói / thời hạn | mô tả tay | giá đã gõ | `Còn hàng` / `Hết hàng` |
+| 1 | `Shop Xoài Non` | `title` | `title` biến thể | `description` | giá đã làm tròn đẹp | tool ghi |
 
-Cột cũ `Nastele ID` trên tab `NASTELEID` vẫn đọc được. Không đặt `Giá gốc`, `Product ID` hay `Giá thấp nhất (VND)` vào file này. Bảng đầy đủ: [bao_gia_tong_hop.md](bao_gia_tong_hop.md).
+Không đặt `Giá gốc` hay `Product ID` vào file này. Bảng đầy đủ: [bao_gia_tong_hop.md](bao_gia_tong_hop.md).
 
 ```powershell
 python -m shop_integration quote-layout
