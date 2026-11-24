@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Bảng khóa NASTELEID và BAO_GIA</title>
+  <style>
+    :root {
+      --header: #0d295c;
+      --band: #e6f0fa;
+      --line: #c5d0dc;
+      --text: #1a2332;
+      --muted: #5b6b7c;
+      --ok: #1b7f3a;
+      --out: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #eef2f6;
+      color: var(--text);
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    .sub { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+    .sheet {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(16, 38, 72, 0.08);
+      margin-bottom: 28px;
+      overflow: hidden;
+      border: 1px solid #d7e0ea;
+    }
+    .tabs {
+      display: flex;
+      gap: 0;
+      background: #f4f7fa;
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px 0;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: 1px solid var(--line);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      background: #e8eef4;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tab.active {
+      background: #fff;
+      color: var(--header);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: var(--header);
+      color: #fff;
+      font-weight: 700;
+      text-align: center;
+      padding: 10px 12px;
+      border-right: 1px solid #1c3c73;
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: var(--band); }
+    .stt, .price { text-align: right; font-variant-numeric: tabular-nums; }
+    .center { text-align: center; }
+    .ok { color: var(--ok); font-weight: 600; }
+    .out { color: var(--out); font-weight: 600; }
+    .note { padding: 10px 14px; color: var(--muted); font-size: 12px; background: #fafcfe; }
+  </style>
+</head>
+<body>
+  <h1>File báo giá tổng hợp — UI khóa</h1>
+  <p class="sub">Hai tab cùng cột. STT là số thứ tự, không lấy local id API. Cột phụ từ cột H.</p>
+
+  <section class="sheet">
+    <div class="tabs">
+      <div class="tab active">NASTELEID</div>
+      <div class="tab">BAO_GIA</div>
+      <div class="tab">BAO_GIA_TONG_HOP</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>STT</th><th>Nguồn</th><th>Tên sản phẩm</th><th>Tên biến thể</th>
+          <th>Mô tả</th><th>Giá bán</th><th>Tình trạng</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="stt">1</td>
+          <td>NASTELEID</td>
+          <td>Canva Pro</td>
+          <td>Gói năm</td>
+          <td>Học sinh</td>
+          <td class="stt">102.700</td>
+          <td class="center ok">Còn hàng</td>
+        </tr>
+        <tr>
+          <td class="stt">2</td>
+          <td>NASTELEID</td>
+          <td>CapCut Pro</td>
+          <td>Gói tháng</td>
+          <td>Tài khoản dùng chung</td>
+          <td class="stt">88.000</td>
+          <td class="center out">Hết hàng</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">Bạn nhập từ dòng 2. Tool chỉ khóa dòng 1 và định dạng, không ghi dữ liệu.</div>
+  </section>
+
+  <section class="sheet">
+    <div class="tabs">
+      <div class="tab">NASTELEID</div>
+      <div class="tab active">BAO_GIA</div>
+      <div class="tab">BAO_GIA_TONG_HOP</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>STT</th><th>Nguồn</th><th>Tên sản phẩm</th><th>Tên biến thể</th>
+          <th>Mô tả</th><th>Giá bán</th><th>Tình trạng</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="stt">1</td>
+          <td>Shop Xoài Non</td>
+          <td>ChatGPT</td>
+          <td>Plus</td>
+          <td>API mô tả</td>
+          <td class="stt">203.000</td>
+          <td class="center ok">Còn hàng</td>
+        </tr>
+        <tr>
+          <td class="stt">2</td>
+          <td>Shop Xoài Non</td>
+          <td>Grok</td>
+          <td></td>
+          <td>Gói API</td>
+          <td class="stt">103.000</td>
+          <td class="center ok">Còn hàng</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">Tool ghi từ API. STT 1, 2, 3… theo catalog. Không có local_id. Giá đã cộng lợi nhuận và làm tròn đẹp.</div>
+  </section>
+</body>
+</html>

@@ -1,7 +1,7 @@
 name: sync-menu
 
-# Lịch 5 phút: fetch nguồn, sanitize Description, cập nhật MENU.
-# Không tạo đơn. Không ghi đè Category Header. Không commit dữ liệu.
+# Lịch 5 phút: ghi BAO_GIA từ API Shop Xoài Non, đọc NASTELEID, cập nhật MENU.
+# Không ghi dữ liệu NASTELEID. Không tạo đơn. Không ghi đè Category Header. Không commit dữ liệu.
 on:
   schedule:
     - cron: "*/5 * * * *"

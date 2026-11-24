@@ -26,6 +26,7 @@ from shop_integration.combined_quote import (
     quote_warranty,
     render_quote_layout,
     shop_quote_rows,
+    shop_sheet_rows,
 )
 from shop_integration.docs_service import DocsService
 from shop_integration.models import Product, Variant
@@ -179,17 +180,16 @@ def _styled_book() -> QuoteMemory:
 
 def test_shop_and_manual_prices_stay_independent() -> None:
     shop = shop_quote_rows(_products(), PricingPolicy())
-    assert [row["STT"] for row in shop] == [1, 2]
-    assert all("local_" not in str(row["STT"]) for row in shop)
+    assert [row["ID"] for row in shop] == [1, 2]
+    assert all("local_" not in str(row["ID"]) for row in shop)
     assert all("Mã" not in row for row in shop)
-    by_name = {row["Tên sản phẩm"]: row for row in shop}
-    assert by_name["ChatGPT"]["Giá bán"] == 203000
-    assert by_name["ChatGPT"]["Giá bán"] == round_pretty_vnd(quote_cost(168000).selling or 0)
-    assert by_name["Grok"]["Giá bán"] == 103000
-    assert by_name["ChatGPT"]["Tên biến thể"] == "Plus"
-    assert by_name["ChatGPT"]["Mô tả"] == "API mô tả"
-    assert by_name["Grok"]["Mô tả"] == "Gói API"
-    assert by_name["Grok"]["Tên biến thể"] == ""
+    by_name = {row["PRODUCT"]: row for row in shop}
+    assert by_name["ChatGPT — Plus"]["PRICE"] == 203000
+    assert by_name["ChatGPT — Plus"]["PRICE"] == round_pretty_vnd(quote_cost(168000).selling or 0)
+    assert by_name["Grok"]["PRICE"] == 103000
+    assert by_name["ChatGPT — Plus"]["DESCRIPTION"] == "API mô tả"
+    assert by_name["Grok"]["DESCRIPTION"] == "Gói API"
+    assert by_name["Grok"]["PRODUCT"] == "Grok"
 
 
 def test_locked_headers_and_format_on_both_quote_sheets() -> None:
@@ -210,30 +210,27 @@ def test_locked_headers_and_format_on_both_quote_sheets() -> None:
     auto = gateway.values[TAB_AUTO]
     assert auto[0] == list(QUOTE_HEADERS)
     assert auto[1][0] == 1
-    assert auto[1][1] == "Shop Xoài Non"
-    assert auto[1][2] == "ChatGPT"
-    assert auto[1][3] == "Plus"
-    assert auto[1][4] == "API mô tả"
+    assert auto[1][1] == "ChatGPT — Plus"
+    assert auto[1][2] == "API mô tả"
     assert auto[1][5] == 203000
     assert auto[2][0] == 2
-    assert auto[2][2] == "Grok"
-    assert auto[2][4] == "Gói API"
+    assert auto[2][1] == "Grok"
+    assert auto[2][2] == "Gói API"
     assert auto[2][5] == 103000
     assert all("local_" not in str(row[0]) for row in auto[1:])
 
     combined = gateway.values[TAB_COMBINED]
     assert combined[0][: len(QUOTE_HEADERS)] == list(QUOTE_HEADERS)
-    manual_rows = [row for row in combined[1:] if len(row) > 1 and row[1] == "NASTELEID"]
-    shop_rows = [row for row in combined[1:] if len(row) > 1 and row[1] == "Shop Xoài Non"]
-    assert manual_rows[0][2] == "Canva tay"
-    assert manual_rows[0][3] == "Gói năm"
+    manual_rows = [row for row in combined[1:] if len(row) > 1 and "Canva tay" in str(row[1])]
+    shop_rows = [row for row in combined[1:] if len(row) > 1 and str(row[1]).startswith("ChatGPT")]
+    grok_rows = [row for row in combined[1:] if len(row) > 1 and str(row[1]) == "Grok"]
+    assert manual_rows[0][1].startswith("Canva tay")
     assert manual_rows[0][5] == 102700
-    assert str(manual_rows[1][2]).startswith(FORMULA_PREFIX)
-    assert shop_rows[0][2] == "ChatGPT"
-    assert shop_rows[0][3] == "Plus"
-    assert shop_rows[0][4] == "API mô tả"
+    formula_rows = [row for row in combined[1:] if len(row) > 1 and str(row[1]).startswith(FORMULA_PREFIX)]
+    assert formula_rows
+    assert shop_rows[0][2] == "API mô tả"
     assert shop_rows[0][5] == 203000
-    assert shop_rows[1][2] == "Grok"
+    assert grok_rows[0][2] == "Gói API"
 
 
 def test_unlocked_headers_keep_other_source() -> None:
@@ -265,7 +262,7 @@ def test_new_tabs_use_locked_headers_and_create_missing_manual() -> None:
     assert gateway.values[TAB_MANUAL][1:] == []
     assert gateway.values[TAB_AUTO][0] == list(QUOTE_HEADERS)
     assert gateway.values[TAB_AUTO][1][0] == 1
-    assert gateway.values[TAB_AUTO][1][2] == "ChatGPT"
+    assert gateway.values[TAB_AUTO][1][1] == "ChatGPT — Plus"
     assert gateway.values[TAB_AUTO][1][5] == 203000
     assert "local_" not in str(gateway.values[TAB_AUTO][1])
     assert result.applied is True
@@ -302,9 +299,9 @@ def test_empty_shop_catalog_does_not_clear_shop_rows() -> None:
     CombinedQuoteWriter(gateway, "last-id").update([], dry_run=False)
     combined = gateway.values[TAB_COMBINED]
     assert combined[0] == list(QUOTE_HEADERS)
-    assert combined[1][2] == "Canva tay"
+    assert "Canva tay" in str(combined[1][1])
     assert combined[1][5] == 102700
-    assert combined[2][2] == "ChatGPT"
+    assert "ChatGPT" in str(combined[2][1])
     assert combined[2][5] == 203000
     assert TAB_AUTO not in gateway.values
 
@@ -404,11 +401,11 @@ def test_writer_uses_unified_nasteleid_and_keeps_cost_warning() -> None:
     assert "Giá gốc" in " ".join(result.warnings)
     combined = gateway.values[TAB_COMBINED]
     assert combined[0] == list(QUOTE_HEADERS)
-    names = [row[2] for row in combined[1:]]
-    assert "Canva Pro 1 năm" in names
-    assert "Shop dán nhầm" not in names
-    assert "ChatGPT" in names
-    assert 102700 in [row[5] for row in combined[1:]]
+    names = [str(row[1]) for row in combined[1:] if len(row) > 1]
+    assert any("Canva Pro 1 năm" in name for name in names)
+    assert all("Shop dán nhầm" not in name for name in names)
+    assert any(name.startswith("ChatGPT") for name in names)
+    assert 102700 in [row[5] for row in combined[1:] if len(row) > 5]
     assert all("local_" not in str(row[0]) for row in combined[1:])
 
 
@@ -416,17 +413,21 @@ def test_unified_nasteleid_headers_are_read() -> None:
     rows, warning = manual_quote_rows(
         [
             list(QUOTE_HEADERS),
-            [1, "NASTELEID", "Canva Pro 1 năm", "Gói năm", "Học sinh", 102700, "Còn hàng"],
-            [2, "", "CapCut", "", "", 88000, "Hết hàng"],
+            [1, "Canva Pro", "Học sinh", "1 Năm", "Bảo hành 1:1", 102700, 12],
+            [2, "CapCut", "", "", "", 88000, 0],
         ]
     )
     assert warning == ""
-    assert [row["STT"] for row in rows] == [1, 2]
+    assert [row["ID"] for row in rows] == [1, 2]
     assert rows[0]["Nguồn"] == "NASTELEID"
-    assert rows[0]["Mô tả"] == "Học sinh"
-    assert rows[0]["Tên biến thể"] == "Gói năm"
-    assert rows[0]["Giá bán"] == 102700
-    assert rows[1]["Nguồn"] == "NASTELEID"
+    assert rows[0]["PRODUCT"] == "Canva Pro"
+    assert rows[0]["DESCRIPTION"] == "Học sinh"
+    assert rows[0]["DURATION"] == "1 Năm"
+    assert rows[0]["WARRANTY"] == "Bảo hành 1:1"
+    assert rows[0]["PRICE"] == 102700
+    assert rows[0]["STOCK"] == 12
+    assert rows[1]["PRODUCT"] == "CapCut"
+    assert rows[1]["STOCK"] == 0
 
 
 def test_nasteleid_skips_shop_rows_and_cost_columns() -> None:
@@ -437,10 +438,28 @@ def test_nasteleid_skips_shop_rows_and_cost_columns() -> None:
             ["NASTELEID", "43", "Canva", 102700, 79000, "Còn hàng", "Gói năm"],
         ]
     )
-    assert [row["Tên sản phẩm"] for row in rows] == ["Canva"]
-    assert rows[0]["Giá bán"] == 102700
+    assert [row["PRODUCT"] for row in rows] == ["Canva — Gói năm"]
+    assert rows[0]["PRICE"] == 102700
     assert "Giá gốc" in warning
     assert "Bỏ 1 dòng" in warning
+
+
+def test_custom_hand_source_is_kept() -> None:
+    rows, warning = manual_quote_rows(
+        [
+            list(QUOTE_HEADERS),
+            [1, "SHopabc", "test", "TESST", "HELLO", 100000, 23],
+        ]
+    )
+    assert warning == ""
+    assert len(rows) == 1
+    assert rows[0]["Nguồn"] == "NASTELEID"
+    assert rows[0]["PRODUCT"] == "SHopabc"
+    assert rows[0]["DESCRIPTION"] == "test"
+    assert rows[0]["DURATION"] == "TESST"
+    assert rows[0]["WARRANTY"] == "HELLO"
+    assert rows[0]["PRICE"] == 100000
+    assert rows[0]["STOCK"] == 23
 
 
 def test_legacy_nastele_id_header_still_reads() -> None:
@@ -451,18 +470,17 @@ def test_legacy_nastele_id_header_still_reads() -> None:
         ]
     )
     assert warning == ""
-    assert rows[0]["STT"] == 1
+    assert rows[0]["ID"] == "N-1"
     assert rows[0]["Nguồn"] == "NASTELEID"
-    assert rows[0]["Tên sản phẩm"] == "Canva tay"
-    assert rows[0]["Tên biến thể"] == "Gói năm"
-    assert rows[0]["Giá bán"] == 102700
-    assert rows[0]["Tình trạng"] == "Còn"
+    assert rows[0]["PRODUCT"] == "Canva tay — Gói năm"
+    assert rows[0]["PRICE"] == 102700
+    assert rows[0]["STOCK"] == "Còn hàng"
 
 
 def test_missing_name_header_skips_manual_tab() -> None:
     rows, warning = manual_quote_rows([["Giá bán"], [1000]])
     assert rows == []
-    assert "Tên sản phẩm" in warning
+    assert "PRODUCT" in warning
 
 
 def test_quote_layout_tables_cover_both_files() -> None:
@@ -510,14 +528,13 @@ def test_nastele_quote_rows_use_selling_price() -> None:
         quantity_presence = "value"
 
     rows = nastele_quote_rows([Offer()])
-    assert rows[0]["STT"] == 1
+    assert rows[0]["ID"] == 1
     assert rows[0]["Nguồn"] == "NASTELEID"
-    assert rows[0]["Tên sản phẩm"] == "SLOT CANVA EDU 1 NĂM"
-    assert rows[0]["Tên biến thể"] == ""
-    assert rows[0]["Giá bán"] == 39000
-    assert rows[0]["Tình trạng"] == "Còn hàng"
-    assert rows[0]["Số lượng"] == 40
-    assert "local_" not in str(rows[0]["STT"])
+    assert rows[0]["PRODUCT"] == "SLOT CANVA EDU 1 NĂM"
+    assert rows[0]["PRICE"] == 39000
+    assert rows[0]["DURATION"] == "1 Năm"
+    assert rows[0]["STOCK"] == 40
+    assert "local_" not in str(rows[0]["ID"])
 
 
 def _menu_storefront() -> list[list[Any]]:
@@ -613,12 +630,41 @@ def _sold_out_product() -> Product:
     )
 
 
+def test_menu_is_built_from_bao_gia_and_nasteleid_sheets() -> None:
+    gateway = _menu_book()
+    gateway.values[TAB_AUTO] = [
+        list(QUOTE_HEADERS),
+        [1, "ChatGPT — Plus", "Giá đã chốt trên sheet", "1 Tháng", "BHF", 150000, "Còn hàng"],
+    ]
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "Canva Pro — Gói năm", "Học sinh", "1 Năm", "Bảo hành 1:1", 102700, "Còn hàng"],
+    ]
+    result = CombinedQuoteWriter(gateway, "last-id").update([], dry_run=False)
+    menu = gateway.values[TAB_MENU]
+    assert menu[7][0] == "SXN-01"
+    assert menu[7][1] == "ChatGPT — Plus"
+    assert menu[7][2] == "Giá đã chốt trên sheet"
+    assert menu[7][5] == 150000
+    assert menu[7][6] == 2
+    assert menu[6][0] == "🤖 SHOP XOÀI NON"
+    nastele = next(row for row in menu if row and row[0] == "NST-01")
+    assert nastele[1] == "Canva Pro — Gói năm"
+    assert nastele[5] == 102700
+    assert "BAO_GIA" in " ".join(result.warnings)
+    assert "NASTELEID" in " ".join(result.warnings)
+    assert shop_sheet_rows(gateway.values[TAB_AUTO])[0][0]["PRICE"] == 150000
+
+
 def test_menu_is_official_quote_from_both_sources() -> None:
     gateway = _menu_book()
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "SLOT CANVA EDU 1 NĂM", "Gói giáo dục", "1 Năm", "Bảo hành 1:1", 39000, "Còn hàng"],
+    ]
     result = CombinedQuoteWriter(gateway, "last-id").update(
         shop_quote_rows(_products()[:1]),
         dry_run=False,
-        nastele_rows=_nastele_canva(),
     )
     assert result.applied is True
     assert result.menu_count == 2
@@ -637,8 +683,11 @@ def test_menu_is_official_quote_from_both_sources() -> None:
     assert menu[15][0] == "NST-01"
     assert menu[15][1] == "SLOT CANVA EDU 1 NĂM"
     assert menu[15][3] == "1 Năm"
+    assert menu[15][5] == 39000
     assert menu[14][9] == "KEEP_NST"
-    assert gateway.values[TAB_MANUAL][1][2] == "SLOT CANVA EDU 1 NĂM"
+    assert gateway.values[TAB_MANUAL][1][1] == "SLOT CANVA EDU 1 NĂM"
+    assert gateway.values[TAB_MANUAL][1][3] == "1 Năm"
+    assert gateway.values[TAB_MANUAL][1][5] == 39000
     grid = menu_quote_grid(("🤖 SHOP XOÀI NON", "SXN", shop_quote_rows(_products()[:1])))
     assert grid[1][0] == "SXN-01"
     assert 7 not in _menu_rows_written(result.ranges)
@@ -741,10 +790,13 @@ def test_menu_bulk_update_does_not_touch_ui_or_warranty() -> None:
     gateway.merges[TAB_MENU] = [
         {"startRowIndex": 6, "endRowIndex": 7, "startColumnIndex": 0, "endColumnIndex": 8}
     ]
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "SLOT CANVA EDU 1 NĂM", "Gói giáo dục", "1 Năm", "Bảo hành 1:1", 39000, "Còn hàng"],
+    ]
     result = CombinedQuoteWriter(gateway, "last-id").update(
         shop_quote_rows(_products() + [_windows_product()]),
         dry_run=False,
-        nastele_rows=_nastele_canva(),
     )
     menu = gateway.values[TAB_MENU]
     assert menu[0][0] == "DIGITAL STORE"
@@ -810,3 +862,198 @@ def test_category_headers_are_detected_by_structure() -> None:
     assert is_category_header_row(["MICROSOFT OFFICE", "", "", "", "", "", "", ""]) is True
     assert is_category_header_row(["SOFTWARE & DIGITAL", "", "", "", "", "", "", ""]) is True
     assert is_category_header_row(["SXN-07", "ChatGPT", "x", "1 Tháng", "BHF", 1, 1, "IN STOCK"]) is False
+
+
+def _chatgpt_plus(*, quantity: int | None, in_stock: bool = True) -> Product:
+    presence = "value" if quantity is not None else "absent"
+    return Product(
+        id="local_cg",
+        title="ChatGPT",
+        variants=[
+            Variant(
+                id="v1",
+                price_vnd=168000,
+                in_stock=in_stock,
+                in_stock_presence="value",
+                title="Plus",
+                description="API mô tả",
+                available_quantity=quantity,
+                quantity_presence=presence,
+            )
+        ],
+    )
+
+
+def test_menu_stock_updates_on_existing_row() -> None:
+    gateway = _menu_book()
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=9)]),
+        dry_run=False,
+    )
+    row = gateway.values[TAB_MENU][7]
+    assert row[0] == "SXN-01"
+    assert row[6] == 9
+    assert row[7] == "IN STOCK"
+
+
+def test_menu_keeps_stock_when_source_omits_quantity() -> None:
+    gateway = _menu_book()
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=None)]),
+        dry_run=False,
+    )
+    row = gateway.values[TAB_MENU][7]
+    assert row[6] == 2
+    assert row[7] == "IN STOCK"
+
+
+def test_sold_out_menu_stock_is_zero() -> None:
+    gateway = _menu_book()
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=4, in_stock=False)]),
+        dry_run=False,
+    )
+    row = gateway.values[TAB_MENU][7]
+    assert row[6] == 0
+    assert row[7] == "SOLD OUT"
+
+
+def test_decorated_menu_name_updates_stock_only() -> None:
+    grid = _menu_storefront()
+    grid[7][1] = "ChatGPT Plus (1 tháng)"
+    grid[7][5] = 150000
+    gateway = _menu_book(grid)
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=9)]),
+        dry_run=False,
+    )
+    row = gateway.values[TAB_MENU][7]
+    assert row[1] == "ChatGPT Plus (1 tháng)"
+    assert row[2] == "API mô tả"
+    assert row[5] == 150000
+    assert row[6] == 9
+    assert row[7] == "IN STOCK"
+    ids = [item[0] if item else "" for item in gateway.values[TAB_MENU]]
+    assert ids.count("SXN-01") == 1
+    assert "SXN-02" not in ids
+
+
+def test_missing_shop_product_stock_expires_without_deleting_row() -> None:
+    gateway = _menu_book()
+    result = CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=9)]),
+        dry_run=False,
+        expire_missing=True,
+    )
+    menu = gateway.values[TAB_MENU]
+    assert menu[7][6] == 9
+    assert menu[7][7] == "IN STOCK"
+    claude = menu[10]
+    assert claude[0] == "AI-01"
+    assert claude[1] == "Claude"
+    assert claude[5] == 1
+    assert claude[6] == 0
+    assert claude[7] == "SOLD OUT"
+    assert menu[9][0] == "🤖 AI ACCOUNTS"
+    assert "STOCK 0" in " ".join(result.warnings)
+
+
+def test_empty_catalog_does_not_expire_menu_stock() -> None:
+    gateway = _menu_book()
+    CombinedQuoteWriter(gateway, "last-id").update([], dry_run=False, expire_missing=True)
+    menu = gateway.values[TAB_MENU]
+    assert menu[7][6] == 2
+    assert menu[7][7] == "IN STOCK"
+    assert menu[10][6] == 1
+    assert menu[10][7] == "IN STOCK"
+
+
+def test_contact_row_is_not_marked_sold_out() -> None:
+    grid = _menu_storefront()
+    grid[10][6] = ""
+    grid[10][7] = "CONTACT"
+    gateway = _menu_book(grid)
+    CombinedQuoteWriter(gateway, "last-id").update(
+        shop_quote_rows([_chatgpt_plus(quantity=9)]),
+        dry_run=False,
+        expire_missing=True,
+    )
+    claude = gateway.values[TAB_MENU][10]
+    assert claude[1] == "Claude"
+    assert claude[6] == ""
+    assert claude[7] == "CONTACT"
+
+
+def test_missing_hand_row_expires_only_nastele_region() -> None:
+    grid = _menu_storefront()
+    grid[15] = ["NST-01", "Canva cũ", "tay", "1 Năm", "BHF", 50, 8, "IN STOCK", "", "KEEP"]
+    gateway = _menu_book(grid)
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "SLOT CANVA EDU 1 NĂM", "Gói giáo dục", "1 Năm", "Bảo hành 1:1", 39000, "Còn hàng"],
+    ]
+    CombinedQuoteWriter(gateway, "last-id").update(
+        [],
+        dry_run=False,
+        expire_missing=True,
+    )
+    menu = gateway.values[TAB_MENU]
+    assert menu[7][6] == 2
+    assert menu[7][7] == "IN STOCK"
+    assert menu[10][7] == "IN STOCK"
+    assert menu[15][0] == "NST-01"
+    assert menu[15][1] == "Canva cũ"
+    assert menu[15][6] == 0
+    assert menu[15][7] == "SOLD OUT"
+    assert menu[14][0] == "💎 NASTELE"
+    assert gateway.values[TAB_MANUAL][1][1] == "SLOT CANVA EDU 1 NĂM"
+
+
+def test_api_catalog_does_not_overwrite_hand_sheet() -> None:
+    gateway = _menu_book()
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "test", "nhãn tay", "", "", 5000, "Còn hàng"],
+    ]
+    result = CombinedQuoteWriter(gateway, "last-id").update(
+        [],
+        dry_run=False,
+        nastele_rows=_nastele_canva(),
+    )
+    assert gateway.values[TAB_MANUAL][1][1] == "test"
+    assert gateway.values[TAB_MANUAL][1][5] == 5000
+    names = [row[1] for row in gateway.values[TAB_MENU] if len(row) > 1]
+    assert "test" in names
+    assert "SLOT CANVA EDU 1 NĂM" not in names
+    assert "Không ghi catalog API" in " ".join(result.warnings)
+
+
+def test_custom_hand_source_reaches_flat_menu() -> None:
+    grid = [
+        ["DIGITAL STORE"],
+        [],
+        [],
+        [],
+        [],
+        list(MENU_HEADERS),
+        ["SXN-01", "ChatGPT — Plus", "mô tả", "1 Tháng", "BHF", 100, 2, "IN STOCK"],
+        ["", "", "", "", "", "", "", ""],
+    ]
+    gateway = _menu_book(grid)
+    gateway.values[TAB_MANUAL] = [
+        list(QUOTE_HEADERS),
+        [1, "test", "mô tả tay", "TESST", "HELLO", 100000, 23],
+    ]
+    before = [list(row) for row in gateway.values[TAB_MANUAL]]
+    result = CombinedQuoteWriter(gateway, "last-id").update([], dry_run=False, expire_missing=True)
+    assert gateway.values[TAB_MANUAL] == before
+    placed = next(row for row in gateway.values[TAB_MENU] if len(row) > 1 and row[1] == "test")
+    assert str(placed[0]).startswith("SXN-")
+    assert placed[2] == "mô tả tay"
+    assert placed[3] == "TESST"
+    assert placed[4] == "HELLO"
+    assert placed[5] == 100000
+    assert placed[6] == 23
+    assert placed[7] == "IN STOCK"
+    assert result.manual_count == 1
+    assert gateway.values[TAB_MENU][6][6] == 2

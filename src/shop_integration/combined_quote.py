@@ -1,11 +1,11 @@
 """Báo giá tổng hợp: MENU là bảng khách chính thức.
 
-NASTELEID và BAO_GIA dùng cùng bảng khóa nguồn.
-Dòng 1: STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng.
-STT là số thứ tự, không lấy local id API.
-BAO_GIA do tool ghi từ Shop Xoài Non.
-NASTELEID do tool ghi khi có catalog Nastele; nếu catalog rỗng thì giữ dòng tay.
-MENU nhận cả hai nguồn, giữ branding và cột bảo hành bên phải.
+NASTELEID và BAO_GIA dùng cùng các cột với MENU, trừ STATUS.
+Dòng 1: ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK.
+ID là số thứ tự trên từng sheet, không lấy local id API.
+BAO_GIA do tool ghi từ API. Hiện tại là Shop Xoài Non.
+NASTELEID chỉ nhập tay. Tool không ghi dữ liệu vào sheet này.
+MENU là bản khách, chép các cột đó từ hai sheet và tự điền STATUS.
 """
 
 from __future__ import annotations
@@ -33,15 +33,15 @@ SOURCE_SHOP = "Shop Xoài Non"
 MANUAL_ID = "Nastele ID"
 
 QUOTE_HEADERS = [
-    "STT",
-    "Nguồn",
-    "Tên sản phẩm",
-    "Tên biến thể",
-    "Mô tả",
-    "Giá bán",
-    "Tình trạng",
+    "ID",
+    "PRODUCT",
+    "DESCRIPTION",
+    "DURATION",
+    "WARRANTY",
+    "PRICE",
+    "STOCK",
 ]
-KEY_HEADERS = ("Nguồn", "STT")
+KEY_HEADERS = ("ID",)
 STOCK_VALUES = ("Còn hàng", "Hết hàng", "Chưa có dữ liệu")
 FORBIDDEN_COST_HEADERS = (
     "Giá gốc",
@@ -59,13 +59,13 @@ FORBIDDEN_COST_HEADERS = (
 )
 HEADER_BLUE = {"red": 0.05, "green": 0.16, "blue": 0.36}
 _COLUMN_WIDTHS = {
-    "STT": 60,
-    "Nguồn": 140,
-    "Tên sản phẩm": 280,
-    "Tên biến thể": 160,
-    "Mô tả": 360,
-    "Giá bán": 120,
-    "Tình trạng": 130,
+    "ID": 70,
+    "PRODUCT": 280,
+    "DESCRIPTION": 360,
+    "DURATION": 120,
+    "WARRANTY": 140,
+    "PRICE": 120,
+    "STOCK": 100,
 }
 MENU_HEADERS = [
     "ID",
@@ -78,6 +78,8 @@ MENU_HEADERS = [
     "STATUS",
 ]
 MENU_COLUMNS = len(MENU_HEADERS)
+MENU_STOCK_COLUMN = MENU_HEADERS.index("STOCK")
+MENU_STATUS_COLUMN = MENU_HEADERS.index("STATUS")
 MENU_SIDEBAR_COLUMN = 9
 SOURCE_SECTIONS = (
     (SOURCE_SHOP, "🤖 SHOP XOÀI NON", "SXN"),
@@ -209,20 +211,17 @@ class QuoteUpdate:
         if dry_run:
             parts.append(
                 f"Dry-run file tổng hợp: {self.shop_count} dòng shop, "
-                f"{self.nastele_count or self.manual_count} dòng Nastele, "
+                f"{self.manual_count} dòng NASTELEID, "
                 f"{self.menu_count} dòng MENU. Không ghi ô."
             )
         elif self.ranges:
             parts.append(
-                "Đã khóa UI STT|Nguồn|Tên sản phẩm|Tên biến thể|Mô tả|Giá bán|Tình trạng "
+                "Đã khóa UI ID|PRODUCT|DESCRIPTION|DURATION|WARRANTY|PRICE|STOCK "
                 "trên NASTELEID và BAO_GIA."
             )
-            if self.nastele_count:
-                parts.append("Đã ghi NASTELEID từ catalog Nastele.")
-            else:
-                parts.append("Không ghi dữ liệu NASTELEID.")
+            parts.append("Không ghi dữ liệu NASTELEID.")
             if self.menu_count:
-                parts.append("Đã cập nhật MENU (báo giá chính thức) từ hai nguồn.")
+                parts.append("Đã cập nhật MENU từ BAO_GIA và NASTELEID.")
         else:
             parts.append("File tổng hợp không có ô cần đổi.")
         return " ".join(parts)
@@ -231,7 +230,7 @@ class QuoteUpdate:
 def shop_quote_rows(
     products: list[Product], policy: PricingPolicy | None = None
 ) -> list[dict[str, Any]]:
-    """Mỗi biến thể có giá bán thành một dòng. STT 1..n. Không ghi local id API."""
+    """Mỗi biến thể có giá bán thành một dòng. ID 1..n. Không ghi local id API."""
 
     rules = policy or PricingPolicy()
     rows: list[dict[str, Any]] = []
@@ -243,21 +242,22 @@ def shop_quote_rows(
             if quote.selling is None:
                 continue
             serial += 1
+            variant_name = (variant.title or "").strip()
             description = _public_description((variant.description or "").strip())
             quantity: Any = ""
             if variant.quantity_presence == "value":
                 quantity = variant.available_quantity
             rows.append(
-                {
-                    "STT": serial,
-                    "Nguồn": SOURCE_SHOP,
-                    "Tên sản phẩm": product_name,
-                    "Tên biến thể": (variant.title or "").strip(),
-                    "Mô tả": description or MISSING_TEXT,
-                    "Giá bán": round_pretty_vnd(quote.selling),
-                    "Tình trạng": variant_stock_label(variant),
-                    "Số lượng": quantity,
-                }
+                _customer_quote_row(
+                    serial,
+                    SOURCE_SHOP,
+                    product_name,
+                    variant_name,
+                    description or MISSING_TEXT,
+                    round_pretty_vnd(quote.selling),
+                    variant_stock_label(variant),
+                    quantity,
+                )
             )
     return rows
 
@@ -293,18 +293,63 @@ def nastele_quote_rows(
         else:
             status = "Chưa có dữ liệu"
         rows.append(
-            {
-                "STT": serial,
-                "Nguồn": SOURCE_MANUAL,
-                "Tên sản phẩm": name,
-                "Tên biến thể": variant,
-                "Mô tả": description or MISSING_TEXT,
-                "Giá bán": round_pretty_vnd(quote.selling),
-                "Tình trạng": status,
-                "Số lượng": quantity if presence == "value" else "",
-            }
+            _customer_quote_row(
+                serial,
+                SOURCE_MANUAL,
+                name,
+                variant,
+                description or MISSING_TEXT,
+                round_pretty_vnd(quote.selling),
+                status,
+                quantity if presence == "value" else "",
+            )
         )
     return rows
+
+
+def _customer_quote_row(
+    serial: int,
+    source: str,
+    name: str,
+    variant: str,
+    description: str,
+    price: Any,
+    status_label: str,
+    quantity: Any,
+) -> dict[str, Any]:
+    product = _display_product(name, variant)
+    text = _customer_description(description, product)
+    blob = " ".join((name, variant, text))
+    return {
+        "ID": serial,
+        "Nguồn": source,
+        "PRODUCT": product,
+        "DESCRIPTION": text,
+        "DURATION": quote_duration(blob),
+        "WARRANTY": quote_warranty(blob),
+        "PRICE": price,
+        "STOCK": _sheet_stock(status_label, quantity),
+    }
+
+
+def _display_product(name: str, variant: str) -> str:
+    cleaned = variant.strip()
+    title = name.strip()
+    if not cleaned or cleaned == title:
+        return title
+    return f"{title} — {cleaned}"
+
+
+def _sheet_stock(status_label: str, quantity: Any) -> Any:
+    """Số trên cột STOCK. Hết hàng là 0. Còn hàng mà không có số thì giữ chữ Còn hàng."""
+
+    if "Hết" in status_label:
+        return 0
+    if isinstance(quantity, int) and not isinstance(quantity, bool):
+        return quantity
+    if "Còn" in status_label:
+        return "Còn hàng"
+    return ""
 
 
 def quote_duration(*parts: object) -> str:
@@ -346,23 +391,28 @@ def menu_quote_grid(*groups: tuple[str, str, list[dict[str, Any]]]) -> list[list
 
 
 def _menu_product_row(item_id: str, row: dict[str, Any]) -> list[Any]:
-    name = str(row.get("Tên sản phẩm") or "").strip()
-    variant = str(row.get("Tên biến thể") or "").strip()
-    product = name if not variant or variant == name else f"{name} — {variant}"
-    description = _customer_description(row.get("Mô tả"), product)
-    blob = " ".join((name, variant, str(row.get("Mô tả") or "")))
-    quantity = row.get("Số lượng")
-    status_label = str(row.get("Tình trạng") or "")
+    """Chép cột A–G từ bảng con. ID trên MENU là mã vùng, không lấy ID của bảng con. STATUS suy ra từ STOCK."""
+
+    product = str(row.get("PRODUCT") or "").strip()
+    description = _customer_description(row.get("DESCRIPTION"), product)
+    quantity, status_label = _stock_parts(row.get("STOCK"))
     return [
         item_id,
         product,
         description,
-        quote_duration(blob),
-        quote_warranty(blob),
-        row.get("Giá bán", ""),
+        str(row.get("DURATION") or "").strip(),
+        str(row.get("WARRANTY") or "").strip(),
+        row.get("PRICE", ""),
         _menu_stock(status_label, quantity),
         _menu_status(status_label, quantity),
     ]
+
+
+def _stock_parts(value: Any) -> tuple[Any, str]:
+    number = _coerce_int(value)
+    if number is not None:
+        return number, ""
+    return "", str(value or "").strip()
 
 
 def _customer_description(value: object, fallback: str) -> str:
@@ -380,10 +430,12 @@ def _public_description(value: object) -> str:
 
 
 def _menu_stock(status_label: str, quantity: object) -> Any:
-    if isinstance(quantity, int) and not isinstance(quantity, bool):
-        return quantity
+    """Số hiện trên cột STOCK. Hết hàng luôn là 0. Thiếu số lượng thì để trống để giữ ô cũ."""
+
     if "Hết" in status_label:
         return 0
+    if isinstance(quantity, int) and not isinstance(quantity, bool):
+        return quantity
     return ""
 
 
@@ -391,6 +443,8 @@ def _menu_status(status_label: str, quantity: object) -> str:
     qty = quantity if isinstance(quantity, int) and not isinstance(quantity, bool) else None
     if "Hết" in status_label or qty == 0:
         return "SOLD OUT"
+    if qty is not None and qty > 5:
+        return "IN STOCK"
     if qty is not None and 0 < qty <= 5:
         return "LOW STOCK"
     if "Còn" in status_label:
@@ -495,12 +549,14 @@ def assign_menu_category(row: dict[str, Any], regions: list[MenuRegion]) -> Menu
     by_key = {region.key: region for region in regions}
     source = str(row.get("Nguồn") or "")
     if source == SOURCE_MANUAL:
-        return by_key.get("nastele")
+        nastele = by_key.get("nastele")
+        if nastele is not None:
+            return nastele
     specialized = [
         region for region in regions if region.key not in {"shop xoài non", "nastele", ""}
     ]
     blob = _fold_category(
-        " ".join(str(row.get(name) or "") for name in ("Tên sản phẩm", "Tên biến thể", "Mô tả"))
+        " ".join(str(row.get(name) or "") for name in ("PRODUCT", "DESCRIPTION"))
     )
     if specialized:
         for key, tokens in _PRODUCT_CATEGORY_RULES:
@@ -517,8 +573,12 @@ def plan_menu_cells(
     shop_rows: list[dict[str, Any]],
     nastele_rows: list[dict[str, Any]],
     header_index: int,
+    *,
+    expire_missing: bool = False,
+    nastele_from_catalog: bool = False,
+    stock_column_only: bool = False,
 ) -> tuple[list[tuple[str, Any]], int, list[str]]:
-    """Cập nhật từng ô A–H của sản phẩm. Không ghi Category Header hay cột J+."""
+    """Cập nhật ô sản phẩm. stock_column_only chỉ ghi STOCK và STATUS của dòng đã có."""
 
     regions = parse_menu_regions(grid, header_index)
     locked = _locked_menu_rows(grid, header_index, regions)
@@ -533,17 +593,23 @@ def plan_menu_cells(
         region = assign_menu_category(item, regions)
         keys = _incoming_name_keys(item)
         row_number = _match_menu_row(keys, region, by_region_name, by_name, used_rows, locked)
+        loose_stock = False
+        if row_number is None:
+            row_number = _loose_match_menu_row(keys, region, by_region_name, by_name, used_rows, locked)
+            loose_stock = row_number is not None
+        if row_number is None and stock_column_only:
+            continue
         item_id = ""
         if row_number is not None:
             item_id = str(_at(grid[row_number - 1] if row_number - 1 < len(grid) else [], 0) or "").strip()
         elif region is None:
-            name = str(item.get("Tên sản phẩm") or "").strip() or "?"
+            name = str(item.get("PRODUCT") or "").strip() or "?"
             notes.append(f"Bỏ qua '{name}' vì chưa có vùng danh mục phù hợp.")
             continue
         else:
             row_number = _next_region_slot(region, used_rows, locked)
             if row_number is None:
-                name = str(item.get("Tên sản phẩm") or "").strip() or "?"
+                name = str(item.get("PRODUCT") or "").strip() or "?"
                 notes.append(
                     f"Bỏ qua '{name}' vì vùng '{region.title or region.key}' không còn hàng trống."
                 )
@@ -557,13 +623,33 @@ def plan_menu_cells(
             if region is not None:
                 by_region_name[(region.key, key)] = row_number
         wanted = _menu_product_row(item_id, item)
-        _append_menu_row_changes(cells, grid, row_number, wanted, locked)
+        if stock_column_only or loose_stock:
+            _append_menu_stock_changes(cells, grid, row_number, wanted, locked)
+        else:
+            _append_menu_row_changes(cells, grid, row_number, wanted, locked)
         placed += 1
-    _sanitize_existing_menu_descriptions(grid, header_index, cells, locked)
-    if not notes:
-        notes.append(
-            "Đã cập nhật MENU theo từng danh mục. Category Header và cột bảo hành bên phải giữ nguyên."
+    if expire_missing:
+        expired = _expire_missing_menu_stock(
+            grid,
+            regions,
+            used_rows,
+            locked,
+            cells,
+            shop_active=bool(shop_rows),
+            nastele_active=nastele_from_catalog and bool(nastele_rows),
         )
+        if expired:
+            notes.append(f"Đã đưa {expired} dòng không còn trong nguồn về STOCK 0.")
+    if not stock_column_only:
+        _sanitize_existing_menu_descriptions(grid, header_index, cells, locked)
+    if not notes:
+        if stock_column_only:
+            notes.append("Đã cập nhật cột STOCK trên MENU. Giá, tên và mô tả giữ nguyên.")
+        else:
+            notes.append(
+                "Đã cập nhật MENU theo từng danh mục, gồm cột STOCK. "
+                "Category Header và cột bảo hành bên phải giữ nguyên."
+            )
     return cells, placed, notes
 
 
@@ -650,12 +736,14 @@ def _existing_name_keys(row: list[Any]) -> set[str]:
 
 
 def _incoming_name_keys(row: dict[str, Any]) -> set[str]:
-    name = str(row.get("Tên sản phẩm") or "").strip()
-    variant = str(row.get("Tên biến thể") or "").strip()
-    keys = {_fold_category(name)} if name else set()
-    if variant and variant != name:
-        keys.add(_fold_category(f"{name} — {variant}"))
-        keys.add(_fold_category(f"{name} {variant}"))
+    product = str(row.get("PRODUCT") or "").strip()
+    keys = {_fold_category(product)} if product else set()
+    for separator in (" — ", " – "):
+        if separator not in product:
+            continue
+        left, right = product.split(separator, 1)
+        keys.add(_fold_category(left))
+        keys.add(_fold_category(f"{left} {right}"))
     return {key for key in keys if key}
 
 
@@ -702,6 +790,58 @@ def _match_menu_row(
     return None
 
 
+def _loose_match_menu_row(
+    keys: set[str],
+    region: MenuRegion | None,
+    by_region_name: dict[tuple[str, str], int],
+    by_name: dict[str, int],
+    used_rows: set[int],
+    locked: set[int],
+) -> int | None:
+    """Khớp tên khách đã thêm hậu tố ngoặc hoặc ghi chú, chỉ để cập nhật STOCK."""
+
+    if region is not None:
+        region_index = {
+            key: row_number
+            for (region_key, key), row_number in by_region_name.items()
+            if region_key == region.key
+        }
+        found = _best_loose_name(keys, region_index, used_rows, locked)
+        if found is not None:
+            return found
+    return _best_loose_name(keys, by_name, used_rows, locked)
+
+
+def _best_loose_name(
+    keys: set[str],
+    index: dict[str, int],
+    used_rows: set[int],
+    locked: set[int],
+) -> int | None:
+    best_row: int | None = None
+    best_score = -1
+    for menu_key, row_number in index.items():
+        if row_number in used_rows or row_number in locked:
+            continue
+        for key in keys:
+            if not _stock_name_fits(menu_key, key):
+                continue
+            score = len(key)
+            if score > best_score or (score == best_score and (best_row is None or row_number < best_row)):
+                best_score = score
+                best_row = row_number
+    return best_row
+
+
+def _stock_name_fits(menu_key: str, incoming_key: str) -> bool:
+    if len(incoming_key) < 4 or not menu_key.startswith(incoming_key):
+        return False
+    if len(menu_key) == len(incoming_key):
+        return False
+    rest = menu_key[len(incoming_key) :].lstrip()
+    return bool(rest) and rest[0] in "(|["
+
+
 def _next_region_slot(region: MenuRegion, used_rows: set[int], locked: set[int]) -> int | None:
     for row_number in region.empty_rows:
         if row_number not in used_rows and row_number not in locked:
@@ -720,10 +860,90 @@ def _append_menu_row_changes(
         return
     raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
     for column, value in enumerate(wanted[:MENU_COLUMNS]):
-        outgoing = _outgoing(value)
-        if _same(_at(raw, column), outgoing):
+        _queue_menu_cell(cells, raw, row_number, column, value)
+
+
+def _append_menu_stock_changes(
+    cells: list[tuple[str, Any]],
+    grid: list[list[Any]],
+    row_number: int,
+    wanted: list[Any],
+    locked: set[int],
+) -> None:
+    """Chỉ ghi STOCK và STATUS. Giữ tên, giá và mô tả khách đã sửa."""
+
+    if row_number in locked:
+        return
+    raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
+    for column in (MENU_STOCK_COLUMN, MENU_STATUS_COLUMN):
+        _queue_menu_cell(cells, raw, row_number, column, wanted[column])
+
+
+def _expire_missing_menu_stock(
+    grid: list[list[Any]],
+    regions: list[MenuRegion],
+    used_rows: set[int],
+    locked: set[int],
+    cells: list[tuple[str, Any]],
+    *,
+    shop_active: bool,
+    nastele_active: bool,
+) -> int:
+    """Dòng còn hiện IN STOCK hoặc LOW STOCK nhưng không còn trong catalog vừa đọc thì hết hàng.
+
+    Không xóa dòng. Không đụng STATUS CONTACT. Nguồn lỗi hoặc catalog rỗng thì giữ số cũ.
+    """
+
+    if not shop_active and not nastele_active:
+        return 0
+    expired = 0
+    seen: set[int] = set()
+    for region in regions:
+        active = nastele_active if region.key == "nastele" else shop_active
+        if not active:
             continue
-        cells.append((_cell_range(TAB_MENU, column, row_number), outgoing))
+        for row_number in region.product_rows:
+            if row_number in seen or row_number in used_rows or row_number in locked:
+                continue
+            seen.add(row_number)
+            raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
+            if not is_menu_product_row(raw):
+                continue
+            status = str(_at(raw, MENU_STATUS_COLUMN) or "").strip().upper()
+            if status not in {"IN STOCK", "LOW STOCK"}:
+                continue
+            before = len(cells)
+            _queue_menu_cell(cells, raw, row_number, MENU_STOCK_COLUMN, 0)
+            _queue_menu_cell(cells, raw, row_number, MENU_STATUS_COLUMN, "SOLD OUT")
+            if len(cells) > before:
+                expired += 1
+    return expired
+
+
+def _only_stock_status_cells(cells: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
+    kept: list[tuple[str, Any]] = []
+    for cell_range, value in cells:
+        letter = "".join(char for char in cell_range.split("!")[-1] if char.isalpha())
+        if letter not in {"G", "H"}:
+            raise ConfigError(f"Từ chối ghi {cell_range}. Lần cập nhật stock chỉ được ghi cột G và H.")
+        kept.append((cell_range, value))
+    return kept
+
+
+def _queue_menu_cell(
+    cells: list[tuple[str, Any]],
+    raw: list[Any],
+    row_number: int,
+    column: int,
+    value: Any,
+) -> None:
+    outgoing = _outgoing(value)
+    current = _at(raw, column)
+    if column == MENU_STOCK_COLUMN and _blank(outgoing) and _number(current) is not None:
+        return
+    if _same(current, outgoing):
+        return
+    cells.append((_cell_range(TAB_MENU, column, row_number), outgoing))
 
 
 def _sanitize_existing_menu_descriptions(
@@ -748,9 +968,29 @@ def _sanitize_existing_menu_descriptions(
 
 
 def manual_quote_rows(grid: list[list[Any]] | None) -> tuple[list[dict[str, Any]], str]:
-    """Đọc NASTELEID cùng cột khóa với BAO_GIA. Giá giữ nguyên như đã gõ."""
+    """Đọc NASTELEID. Mọi dòng PRODUCT đều vào MENU. Bảng cũ vẫn bỏ dòng nguồn Shop Xoài Non."""
 
-    rows, notes = _records_from_grid(grid, default_source=SOURCE_MANUAL, only_source=SOURCE_MANUAL)
+    rows, notes = _records_from_grid(grid, default_source=SOURCE_MANUAL)
+    kept: list[dict[str, Any]] = []
+    skipped_shop = 0
+    for row in rows:
+        if row.pop("_legacy", False) and str(row.get("Nguồn") or "") == SOURCE_SHOP:
+            skipped_shop += 1
+            continue
+        row["Nguồn"] = SOURCE_MANUAL
+        kept.append(row)
+    if skipped_shop:
+        notes.append(f"Bỏ {skipped_shop} dòng Shop Xoài Non trên NASTELEID. Nguồn đó nằm ở BAO_GIA.")
+    return kept, " ".join(notes)
+
+
+def shop_sheet_rows(grid: list[list[Any]] | None) -> tuple[list[dict[str, Any]], str]:
+    """Đọc BAO_GIA. Giá và STOCK giữ nguyên như trên sheet."""
+
+    rows, notes = _records_from_grid(grid, default_source=SOURCE_SHOP, only_source=SOURCE_SHOP)
+    for row in rows:
+        row.pop("_legacy", None)
+        row["Nguồn"] = SOURCE_SHOP
     return rows, " ".join(notes)
 
 
@@ -797,9 +1037,6 @@ def plan_tab(
     existing = _existing_keys(grid, index)
     cells: list[tuple[str, Any]] = []
     for key, row_number in existing.items():
-        source, _stt = key
-        if source not in sources_to_refresh:
-            continue
         if key not in wanted:
             cells.extend(_clears(tab, grid, row_number, index))
             continue
@@ -899,8 +1136,10 @@ def build_quote_format_requests(
             }
         }
     )
-    if "Giá bán" in headers:
-        column = headers.index("Giá bán")
+    for money_header in ("PRICE", "STOCK"):
+        if money_header not in headers:
+            continue
+        column = headers.index(money_header)
         requests.append(
             {
                 "repeatCell": {
@@ -952,33 +1191,17 @@ class CombinedQuoteWriter:
         *,
         dry_run: bool,
         nastele_rows: list[dict[str, Any]] | None = None,
+        expire_missing: bool = False,
     ) -> QuoteUpdate:
         titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
         warnings: list[str] = []
         plans: list[TabPlan] = []
         manual_rows: list[dict[str, Any]] = []
         refresh_manual = False
-        auto_nastele = bool(nastele_rows)
+        if nastele_rows:
+            warnings.append("Không ghi catalog API vào NASTELEID. Sheet này chỉ nhập tay.")
 
-        if auto_nastele:
-            wanted, order = _desired_index(nastele_rows or [])
-            manual_rows = [wanted[key] for key in order]
-            refresh_manual = True
-            plans.append(
-                TabPlan(
-                    tab=TAB_MANUAL,
-                    create=TAB_MANUAL not in titles,
-                    full_grid=_padded_full_grid(
-                        order,
-                        wanted,
-                        len(self._read(TAB_MANUAL)) if TAB_MANUAL in titles else 1,
-                    ),
-                    format_ui=True,
-                    allow_manual_data=True,
-                    warning="Đã ghi NASTELEID từ catalog Nastele.",
-                )
-            )
-        elif TAB_MANUAL not in titles:
+        if TAB_MANUAL not in titles:
             plans.append(
                 TabPlan(
                     tab=TAB_MANUAL,
@@ -1023,6 +1246,13 @@ class CombinedQuoteWriter:
         if refresh_shop:
             combined.extend(shop_rows)
             sources.add(SOURCE_SHOP)
+        elif TAB_AUTO in titles:
+            kept, kept_note = shop_sheet_rows(self._read(TAB_AUTO))
+            if kept_note:
+                warnings.append(kept_note)
+            if kept:
+                combined.extend(kept)
+                sources.add(SOURCE_SHOP)
         elif TAB_COMBINED in titles:
             kept = [
                 row
@@ -1033,11 +1263,28 @@ class CombinedQuoteWriter:
                 combined.extend(kept)
                 sources.add(SOURCE_SHOP)
         if sources:
-            plans.append(self._plan(TAB_COMBINED, titles, combined, sources=sources))
+            plans.append(self._plan(TAB_COMBINED, titles, _stacked_rows(combined), sources=sources))
+
+        menu_shop_rows = list(shop_rows)
+        if menu_shop_rows:
+            warnings.append("MENU lấy phần Shop Xoài Non từ BAO_GIA vừa lập.")
+        elif TAB_AUTO in titles:
+            menu_shop_rows, sheet_note = shop_sheet_rows(self._read(TAB_AUTO))
+            if sheet_note:
+                warnings.append(sheet_note)
+            if menu_shop_rows:
+                warnings.append("MENU lấy phần Shop Xoài Non từ sheet BAO_GIA đang có.")
+        if manual_rows:
+            warnings.append("MENU lấy phần nhập tay từ sheet NASTELEID.")
 
         menu_count = 0
         if TAB_MENU in titles:
-            menu_plan, menu_count = self._plan_menu(shop_rows, manual_rows)
+            menu_plan, menu_count = self._plan_menu(
+                menu_shop_rows,
+                manual_rows,
+                expire_missing=expire_missing,
+                nastele_from_catalog=bool(manual_rows),
+            )
             if menu_plan is not None:
                 plans.append(menu_plan)
         else:
@@ -1062,6 +1309,63 @@ class CombinedQuoteWriter:
         return QuoteUpdate(
             shop_count=len(shop_rows),
             manual_count=len(manual_rows),
+            nastele_count=0,
+            menu_count=menu_count,
+            warnings=warnings,
+            ranges=ranges,
+            applied=applied,
+        )
+
+    def update_stock(
+        self,
+        shop_rows: list[dict[str, Any]],
+        *,
+        dry_run: bool,
+        nastele_rows: list[dict[str, Any]] | None = None,
+        expire_missing: bool = True,
+    ) -> QuoteUpdate:
+        """Chỉ ghi cột STOCK và STATUS của dòng MENU đã có. Không đổi giá, tên, mô tả."""
+
+        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
+        warnings = ["Chỉ cập nhật cột STOCK và STATUS trên MENU."]
+        if TAB_MENU not in titles:
+            warnings.append("Bỏ qua MENU vì tab chưa có. Không tạo mới.")
+            return QuoteUpdate(
+                shop_count=len(shop_rows),
+                manual_count=len(nastele_rows or []),
+                nastele_count=len(nastele_rows or []),
+                warnings=warnings,
+                ranges=[],
+                applied=False,
+            )
+        plan, menu_count = self._plan_menu(
+            shop_rows,
+            list(nastele_rows or []),
+            expire_missing=expire_missing,
+            nastele_from_catalog=bool(nastele_rows),
+            stock_column_only=True,
+        )
+        if plan is None:
+            warnings.append("Không lập được kế hoạch STOCK.")
+            return QuoteUpdate(
+                shop_count=len(shop_rows),
+                manual_count=len(nastele_rows or []),
+                nastele_count=len(nastele_rows or []),
+                warnings=warnings,
+                ranges=[],
+                applied=False,
+            )
+        if plan.warning:
+            warnings.append(plan.warning)
+        plan.cells = _only_stock_status_cells(plan.cells)
+        ranges = plan.ranges()
+        applied = False
+        if not dry_run and plan.cells:
+            self._apply([plan])
+            applied = True
+        return QuoteUpdate(
+            shop_count=len(shop_rows),
+            manual_count=len(nastele_rows or []),
             nastele_count=len(nastele_rows or []),
             menu_count=menu_count,
             warnings=warnings,
@@ -1091,6 +1395,10 @@ class CombinedQuoteWriter:
         self,
         shop_rows: list[dict[str, Any]],
         nastele_rows: list[dict[str, Any]],
+        *,
+        expire_missing: bool = False,
+        nastele_from_catalog: bool = False,
+        stock_column_only: bool = False,
     ) -> tuple[TabPlan | None, int]:
         grid = self._read(TAB_MENU)
         header_index = _menu_header_index(grid)
@@ -1102,7 +1410,15 @@ class CombinedQuoteWriter:
                 ),
                 0,
             )
-        cells, count, notes = plan_menu_cells(grid, shop_rows, nastele_rows, header_index)
+        cells, count, notes = plan_menu_cells(
+            grid,
+            shop_rows,
+            nastele_rows,
+            header_index,
+            expire_missing=expire_missing,
+            nastele_from_catalog=nastele_from_catalog,
+            stock_column_only=stock_column_only,
+        )
         return (
             TabPlan(
                 tab=TAB_MENU,
@@ -1196,7 +1512,7 @@ def quote_layout_tables() -> list[tuple[str, list[str], list[list[str]]]]:
                     "Báo giá chính thức",
                     "LAST_SPREADSHEET_ID",
                     "MENU, NASTELEID, BAO_GIA, BAO_GIA_TONG_HOP",
-                    "MENU là bảng khách. Tool ghi MENU, BAO_GIA, BAO_GIA_TONG_HOP. Nastele vào NASTELEID khi có catalog.",
+                    "NASTELEID nhập tay. BAO_GIA ghi từ API. MENU ghép hai sheet đó.",
                 ],
             ],
         ),
@@ -1204,21 +1520,21 @@ def quote_layout_tables() -> list[tuple[str, list[str], list[list[str]]]]:
             "Cột khóa — dòng 1 của NASTELEID và BAO_GIA",
             ["Cột", "BAO_GIA (API shop)", "NASTELEID (nhập tay)"],
             [
-                ["STT", "1, 2, 3… theo thứ tự catalog. Không lấy local id.", "1, 2, 3… do bạn đánh."],
-                ["Nguồn", "Shop Xoài Non", "NASTELEID hoặc để trống."],
-                ["Tên sản phẩm", "title sản phẩm", "Tên khách thấy."],
-                ["Tên biến thể", "title biến thể", "Gói / thời hạn."],
-                ["Mô tả", "description biến thể", "Mô tả tay."],
-                ["Giá bán", "Giá shop đã + lợi nhuận, làm tròn đẹp.", "Giá đã gõ, không làm tròn lại."],
-                ["Tình trạng", stock, stock],
+                ["ID", "1, 2, 3… theo thứ tự catalog. Không lấy local id.", "Số bạn đánh."],
+                ["PRODUCT", "Tên khách, gồm biến thể nếu có.", "Tên khách thấy."],
+                ["DESCRIPTION", "Mô tả biến thể, đã bỏ liên hệ nội bộ.", "Mô tả tay."],
+                ["DURATION", "Suy ra từ tên, ví dụ 1 Tháng.", "Thời hạn bạn gõ."],
+                ["WARRANTY", "Suy ra từ tên, ví dụ BHF.", "Bảo hành bạn gõ."],
+                ["PRICE", "Giá shop đã + lợi nhuận, làm tròn đẹp.", "Giá đã gõ, không làm tròn lại."],
+                ["STOCK", f"Số lượng. Hết hàng là 0. Không có số thì một trong: {stock}.", "Số bạn gõ."],
             ],
         ),
         (
             "Không copy từ file catalog",
             ["Cột catalog", "Vì sao sai", "Cột đúng"],
             [
-                ["Product ID / Variant ID / local_…", "Không đưa mã nội bộ lên bảng khách.", "STT"],
-                ["Giá gốc / Retail Cost", "Giá vốn.", "Giá bán"],
+                ["Product ID / Variant ID / local_…", "Không đưa mã nội bộ lên bảng khách.", "ID"],
+                ["Giá gốc / Retail Cost", "Giá vốn.", "PRICE"],
                 ["Lợi nhuận / %", "Nội bộ.", "(không có)"],
             ],
         ),
@@ -1228,7 +1544,7 @@ def quote_layout_tables() -> list[tuple[str, list[str], list[list[str]]]]:
             [
                 [
                     columns,
-                    "1 | NASTELEID | Canva Pro | Gói năm | Học sinh | 102700 | Còn hàng",
+                    "1 | Canva Pro | Học sinh | 1 Năm | Bảo hành 1:1 | 102700 | 12",
                     "Khóa định dạng. Không ghi dữ liệu. Không lấy local id API.",
                 ]
             ],
@@ -1257,25 +1573,67 @@ def _records_from_grid(
         notes.append(
             "Có cột giá vốn "
             + ", ".join(cost_hits)
-            + ". Không lấy các cột này. Chỉ dùng cột Giá bán."
+            + ". Không lấy các cột này. Chỉ dùng cột PRICE."
         )
+    if "PRODUCT" in index:
+        return _rows_from_customer_columns(grid, index, default_source), notes
     if "Tên sản phẩm" not in index:
-        return [], ["Thiếu cột Tên sản phẩm. Không đọc dòng dữ liệu."]
+        return [], ["Thiếu cột PRODUCT. Không đọc dòng dữ liệu."]
+    return _rows_from_legacy_columns(grid, index, default_source=default_source, only_source=only_source, notes=notes)
+
+
+def _rows_from_customer_columns(
+    grid: list[list[Any]],
+    index: dict[str, int],
+    default_source: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for offset, raw in enumerate(grid[1:], start=1):
+        product = _at(raw, index.get("PRODUCT"))
+        price = _coerce_price(_at(raw, index.get("PRICE")))
+        if _blank(product) and _blank(price):
+            continue
+        serial = _key_part(_at(raw, index.get("ID"))) or str(offset)
+        if serial in seen:
+            continue
+        seen.add(serial)
+        rows.append(
+            {
+                "ID": _coerce_int(serial) or serial,
+                "Nguồn": default_source,
+                "PRODUCT": product,
+                "DESCRIPTION": _public_description(_at(raw, index.get("DESCRIPTION"))),
+                "DURATION": _at(raw, index.get("DURATION")),
+                "WARRANTY": _at(raw, index.get("WARRANTY")),
+                "PRICE": price,
+                "STOCK": _coerce_stock(_at(raw, index.get("STOCK"))),
+            }
+        )
+    return rows
+
+
+def _rows_from_legacy_columns(
+    grid: list[list[Any]],
+    index: dict[str, int],
+    *,
+    default_source: str,
+    only_source: str,
+    notes: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     skipped_foreign = 0
     for offset, raw in enumerate(grid[1:], start=1):
         source = _key_part(_at(raw, index.get("Nguồn"))) or default_source
-        if only_source and source and source != only_source:
+        if only_source and "Nguồn" in index and source and source != only_source:
             skipped_foreign += 1
             continue
-        if only_source:
-            source = only_source
         name = _at(raw, index.get("Tên sản phẩm"))
-        price = _at(raw, index.get("Giá bán"))
+        price = _coerce_price(_at(raw, index.get("Giá bán")))
         if _blank(name) and _blank(price):
             continue
-        serial = _key_part(_at(raw, index.get("STT"))) or str(offset)
+        serial = _key_part(_at(raw, index.get("STT"))) or _key_part(_at(raw, index.get("Nastele ID"))) or str(offset)
         key = f"{source}|{serial}"
         if key in seen:
             continue
@@ -1284,17 +1642,22 @@ def _records_from_grid(
         if _blank(variant):
             variant = _at(raw, index.get("Cấu hình"))
         description = _public_description(_at(raw, index.get("Mô tả")))
-        rows.append(
-            {
-                "STT": int(serial) if serial.isdigit() else offset,
-                "Nguồn": source or default_source,
-                "Tên sản phẩm": name,
-                "Tên biến thể": variant,
-                "Mô tả": description,
-                "Giá bán": price,
-                "Tình trạng": _at(raw, index.get("Tình trạng")),
-            }
+        status = str(_at(raw, index.get("Tình trạng")) or "")
+        quantity = _at(raw, index.get("Số lượng"))
+        row = _customer_quote_row(
+            _coerce_int(serial) or offset,
+            source or default_source,
+            str(name or ""),
+            str(variant or ""),
+            str(description or ""),
+            price,
+            status,
+            _coerce_int(quantity) if _coerce_int(quantity) is not None else "",
         )
+        if not str(serial).isdigit():
+            row["ID"] = serial
+        row["_legacy"] = True
+        rows.append(row)
     if skipped_foreign:
         notes.append(
             f"Bỏ {skipped_foreign} dòng nguồn khác. Chỉ lấy dòng Nguồn trống hoặc {only_source}."
@@ -1366,30 +1729,38 @@ def _sources_in_grid(grid: list[list[Any]], headers: list[str]) -> set[str]:
 
 def _desired_index(
     desired: list[dict[str, Any]],
-) -> tuple[dict[tuple[str, str], dict[str, Any]], list[tuple[str, str]]]:
-    found: dict[tuple[str, str], dict[str, Any]] = {}
-    order: list[tuple[str, str]] = []
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    found: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
     for row in desired:
-        key = (_key_part(row.get("Nguồn")), _key_part(row.get("STT")))
-        if not key[0] or not key[1] or key in found:
+        key = _key_part(row.get("ID"))
+        if not key or key in found:
             continue
         found[key] = row
         order.append(key)
     return found, order
 
 
-def _existing_keys(
-    grid: list[list[Any]], index: dict[str, int]
-) -> dict[tuple[str, str], int]:
-    found: dict[tuple[str, str], int] = {}
-    source_col = index["Nguồn"]
-    stt_col = index["STT"]
+def _existing_keys(grid: list[list[Any]], index: dict[str, int]) -> dict[str, int]:
+    found: dict[str, int] = {}
+    id_col = index.get("ID")
+    if id_col is None:
+        return found
     for offset, raw in enumerate(grid[1:], start=2):
-        key = (_key_part(_at(raw, source_col)), _key_part(_at(raw, stt_col)))
-        if not key[0] or not key[1] or key in found:
+        key = _key_part(_at(raw, id_col))
+        if not key or key in found:
             continue
         found[key] = offset
     return found
+
+
+def _stacked_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stacked: list[dict[str, Any]] = []
+    for serial, row in enumerate(rows, start=1):
+        item = dict(row)
+        item["ID"] = serial
+        stacked.append(item)
+    return stacked
 
 
 def _changes(
@@ -1425,9 +1796,7 @@ def _clears(
     return cells
 
 
-def _full_grid(
-    order: list[tuple[str, str]], wanted: dict[tuple[str, str], dict[str, Any]]
-) -> list[list[Any]]:
+def _full_grid(order: list[str], wanted: dict[str, dict[str, Any]]) -> list[list[Any]]:
     grid: list[list[Any]] = [list(QUOTE_HEADERS)]
     for key in order:
         row = wanted[key]
@@ -1436,8 +1805,8 @@ def _full_grid(
 
 
 def _padded_full_grid(
-    order: list[tuple[str, str]],
-    wanted: dict[tuple[str, str], dict[str, Any]],
+    order: list[str],
+    wanted: dict[str, dict[str, Any]],
     previous_rows: int,
 ) -> list[list[Any]]:
     grid = _full_grid(order, wanted)
@@ -1463,6 +1832,29 @@ def _same(current: Any, desired: Any) -> bool:
     if left is not None and right is not None:
         return left == right
     return False
+
+
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    text = str(value).strip().replace(" ", "")
+    if text.isdigit():
+        return int(text)
+    return None
+
+
+def _coerce_price(value: Any) -> Any:
+    number = _coerce_int(value)
+    return number if number is not None else value
+
+
+def _coerce_stock(value: Any) -> Any:
+    number = _coerce_int(value)
+    return number if number is not None else value
 
 
 def _number(value: Any) -> float | None:

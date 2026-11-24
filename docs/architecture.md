@@ -194,11 +194,11 @@ Logger `httpx`, `httpcore` và `googleapiclient` bị đặt mức WARNING để
 
 ## Báo giá tổng hợp — UI thống nhất
 
-File `LAST_SPREADSHEET_ID` tách khỏi catalog `GOOGLE_SPREADSHEET_ID`. `NASTELEID` và `BAO_GIA` khóa cùng cột: `STT`, `Nguồn`, `Tên sản phẩm`, `Tên biến thể`, `Mô tả`, `Giá bán`, `Tình trạng`. `STT` là số thứ tự, không lấy local id API. `Mô tả` lấy `description` biến thể.
+File `LAST_SPREADSHEET_ID` tách khỏi catalog `GOOGLE_SPREADSHEET_ID`. `NASTELEID` và `BAO_GIA` khóa cùng cột với phần sản phẩm của `MENU`: `ID`, `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK`. `ID` là số thứ tự trên từng sheet, không lấy local id API. `MENU` thêm cột `STATUS`.
 
-`NASTELEID` do người dùng nhập. Tool chỉ tạo/khóa dòng tiêu đề và định dạng, không ghi dữ liệu. Dòng có `Nguồn` khác `NASTELEID` bị bỏ. Cột giá vốn không map sang `Giá bán`.
+`NASTELEID` do người dùng nhập. Tool chỉ tạo/khóa dòng tiêu đề và định dạng, không ghi dữ liệu sản phẩm và không đổ catalog API vào tab này. Cột giá vốn không map sang `PRICE`.
 
-`BAO_GIA` nhận giá shop đã cộng lợi nhuận rồi làm tròn đẹp. `BAO_GIA_TONG_HOP` xếp chồng hai nguồn, không chọn nguồn rẻ hơn. Mỗi lần chạy khóa lại header, đóng băng dòng 1 và khổ cột.
+`BAO_GIA` nhận giá shop đã cộng lợi nhuận rồi làm tròn đẹp, cùng số lượng ở cột `STOCK`. Hiện tại nguồn API của tab này là Shop Xoài Non. `MENU` chép sáu cột nội dung từ `BAO_GIA` và `NASTELEID`, giữ mã vùng `SXN-` / `NST-`, rồi điền `STATUS` từ `STOCK`. `BAO_GIA_TONG_HOP` xếp chồng hai nguồn đó, không chọn nguồn rẻ hơn. `sync`, `report` và `sync-menu` dùng cùng writer này. Mỗi lần chạy khóa lại header, đóng băng dòng 1 và khổ cột.
 
 Bảng cột đầy đủ nằm ở `docs/bao_gia_tong_hop.md`. Lệnh `quote-layout` in cùng các bảng đó, không gọi mạng.
 

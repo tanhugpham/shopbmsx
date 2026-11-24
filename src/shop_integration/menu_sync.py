@@ -1,4 +1,7 @@
-"""Đồng bộ MENU định kỳ. Chỉ ghi ô sản phẩm. Không tạo đơn."""
+"""Đồng bộ MENU định kỳ từ BAO_GIA và NASTELEID. Không tạo đơn.
+
+BAO_GIA được ghi từ API Shop Xoài Non. NASTELEID chỉ được đọc. MENU ghép hai sheet đó.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from shop_integration.api_client import ShopApiClient
-from shop_integration.combined_quote import CombinedQuoteWriter, nastele_quote_rows, shop_quote_rows
+from shop_integration.combined_quote import CombinedQuoteWriter, shop_quote_rows
 from shop_integration.config import Settings
 from shop_integration.google_auth import WORKSPACE_SCOPES, load_service_account_credentials
 from shop_integration.logging_utils import redact
@@ -158,24 +161,16 @@ def _run_menu_sync(
     notes: list[str] = []
     errors: list[str] = []
     products: list[Any] = []
-    nastele_rows: list[dict[str, Any]] | None = None
+    manual_count = 0
     policy = policy_from_settings(settings)
+    notes.append("NASTELEID chỉ nhập tay. Không ghi sheet này từ API.")
 
     try:
         products, parse_notes = _load_shop_products(settings, shop_client)
         notes.extend(parse_notes)
     except Exception as exc:
         errors.append(f"Nguồn shop lỗi: {exc}")
-        notes.append("Giữ MENU hiện có vì nguồn shop lỗi. Không xóa sản phẩm.")
-
-    try:
-        nastele_rows, nastele_note = _load_nastele_rows(settings, policy)
-        if nastele_note:
-            notes.append(nastele_note)
-    except Exception as exc:
-        errors.append(f"Nguồn Nastele lỗi: {exc}")
-        notes.append("Giữ NASTELEID hiện có vì nguồn Nastele lỗi.")
-        nastele_rows = None
+        notes.append("Giữ BAO_GIA hiện có vì nguồn shop lỗi. MENU vẫn đọc hai sheet.")
 
     shop_rows = shop_quote_rows(products, policy)
     own_gateway = False
@@ -196,10 +191,11 @@ def _run_menu_sync(
             result = CombinedQuoteWriter(gateway, spreadsheet_id).update(
                 shop_rows,
                 dry_run=not live,
-                nastele_rows=nastele_rows,
+                expire_missing=True,
             )
             applied = result.applied
             menu_count = result.menu_count
+            manual_count = result.manual_count
             cells_written += len(result.ranges)
             notes.extend(item for item in result.warnings if item)
             leftover, extra_cells = _sanitize_description_tabs(
@@ -236,7 +232,7 @@ def _run_menu_sync(
         status=status,
         live=live,
         shop_count=len(shop_rows),
-        nastele_count=len(nastele_rows or []),
+        nastele_count=manual_count,
         menu_count=menu_count,
         cells_written=cells_written,
         leftover_handles=leftover,
@@ -261,17 +257,6 @@ def _load_shop_products(settings: Settings, shop_client: Any | None) -> tuple[li
         products, warnings = ProductService().parse_many(raw_items)
         notes.extend(item.message for item in warnings)
         return products, notes
-
-
-def _load_nastele_rows(settings: Settings, policy: Any) -> tuple[list[dict[str, Any]] | None, str]:
-    from shop_integration.suppliers.source_sync import collect_nastele
-
-    result = collect_nastele(settings, format_timestamp(now_vietnam()))
-    if result.blocked or result.error:
-        return None, result.error or "Bỏ qua Nastele vì thiếu cấu hình."
-    if result.catalog_status == "NASTELE_CATALOG_EMPTY" or not result.offers:
-        return None, "Catalog Nastele rỗng. Giữ NASTELEID hiện có."
-    return nastele_quote_rows(result.offers, policy), ""
 
 
 def _open_gateway(settings: Settings) -> GoogleSheetsGateway | None:

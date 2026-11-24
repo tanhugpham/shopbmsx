@@ -14,7 +14,7 @@ python -m shop_integration quote-layout
 | File | Biến môi trường | Tab liên quan | Ai ghi | Bạn làm gì |
 | --- | --- | --- | --- | --- |
 | Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`, `LICH_SU_GIA`, `NHAT_KY_DONG_BO`, `CAU_HINH` | Tool ghi khi `sync` | Xem giá gốc, tồn kho, cấu hình nội bộ. Không copy sang file tổng hợp. |
-| Báo giá chính thức | `LAST_SPREADSHEET_ID` | `MENU`, `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | `MENU` là bảng khách. Tool ghi `MENU`, `BAO_GIA`, `BAO_GIA_TONG_HOP`. Catalog Nastele ghi vào `NASTELEID` khi API có hàng | Xem giá khách trên `MENU`. Không sửa cột A–H của `MENU`. |
+| Báo giá chính thức | `LAST_SPREADSHEET_ID` | `MENU`, `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | `NASTELEID` chỉ nhập tay. Tool ghi `BAO_GIA` từ API, rồi ghi `MENU` và `BAO_GIA_TONG_HOP` từ hai sheet đó | Nhập sản phẩm tay trên `NASTELEID`. Xem giá khách trên `MENU`. Không sửa cột A–H của `MENU`. |
 
 File tổng hợp để trống `LAST_SPREADSHEET_ID` thì lệnh bỏ qua, không tạo file mới.
 
@@ -24,63 +24,75 @@ Hai tab dùng **cùng một dòng 1**. Tool khóa định dạng (header, đóng
 
 | Cột | BAO_GIA (API shop) | NASTELEID (nhập tay) |
 | --- | --- | --- |
-| STT | 1, 2, 3… theo thứ tự catalog. Không lấy `local_…`. | 1, 2, 3… do bạn đánh. |
-| Nguồn | `Shop Xoài Non` | `NASTELEID` hoặc để trống |
-| Tên sản phẩm | `title` sản phẩm | Tên khách thấy |
-| Tên biến thể | `title` biến thể | Gói / thời hạn |
-| Mô tả | `description` biến thể | Mô tả tay |
-| Giá bán | Giá đã + lợi nhuận, làm tròn đẹp | Giá đã gõ, không làm tròn lại |
-| Tình trạng | Còn hàng / Hết hàng | Còn hàng / Hết hàng / Chưa có dữ liệu |
+| ID | 1, 2, 3… theo thứ tự catalog. Không lấy `local_…`. | Số bạn đánh. |
+| PRODUCT | Tên khách, gồm biến thể nếu có. | Tên khách thấy. |
+| DESCRIPTION | Mô tả biến thể, đã bỏ liên hệ nội bộ. | Mô tả tay. |
+| DURATION | Suy ra từ tên, ví dụ `1 Tháng`. | Thời hạn bạn gõ. |
+| WARRANTY | Suy ra từ tên, ví dụ `BHF`. | Bảo hành bạn gõ. |
+| PRICE | Giá đã + lợi nhuận, làm tròn đẹp. | Giá đã gõ, không làm tròn lại. |
+| STOCK | Số lượng. Hết hàng là `0`. API không gửi số thì `Còn hàng`. | Số bạn gõ. |
+
+`MENU` có thêm cột `STATUS`. Tool suy ra từ `STOCK`: số `0` hoặc chữ `Hết` là `SOLD OUT`, từ 1 đến 5 là `LOW STOCK`, lớn hơn 5 hoặc chữ `Còn` là `IN STOCK`.
 
 ## Mẫu dòng NASTELEID
 
-| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | NASTELEID | Canva Pro | Gói năm | Học sinh | 102700 | Còn hàng |
+| 1 | Canva Pro | Học sinh | 1 Năm | Bảo hành 1:1 | 102700 | 12 |
 
 Tool khóa dòng 1 và định dạng. Không ghi dữ liệu từ dòng 2.
 
 ## Mẫu dòng BAO_GIA (tool ghi)
 
-| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Shop Xoài Non | ChatGPT | Plus | API mô tả | 203000 | Còn hàng |
+| 1 | ChatGPT — Plus | API mô tả | 1 Tháng | BHF | 203000 | 36 |
 
 Không sửa tay các cột A–G. Không có `local_id`.
 
 ## Mẫu dòng BAO_GIA_TONG_HOP (tool ghi)
 
-| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | NASTELEID | Canva Pro | Gói năm | Học sinh | 102700 | Còn hàng |
-| 1 | Shop Xoài Non | ChatGPT | Plus | API mô tả | 203000 | Còn hàng |
+| 1 | Canva Pro | Học sinh | 1 Năm | Bảo hành 1:1 | 102700 | 12 |
+| 2 | ChatGPT — Plus | API mô tả | 1 Tháng | BHF | 203000 | 36 |
 
-Hai nguồn xếp chồng. Giá Nastele giữ nguyên như đã gõ. Giá shop giữ giá đã làm tròn trên `BAO_GIA`.
+Hai nguồn xếp chồng. `ID` trên bảng này được đánh lại từ 1. Giá Nastele giữ nguyên như đã gõ. Giá shop giữ giá đã làm tròn trên `BAO_GIA`.
 
 ## MENU (bảng khách)
 
-Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@admin`.
+`MENU` là bản khách của đúng hai sheet `BAO_GIA` và `NASTELEID`. Lệnh `sync`, `report` và `sync-menu` dùng cùng một đường:
+
+1. API Shop Xoài Non có dòng thì ghi `BAO_GIA`. API lỗi hoặc không có dòng thì giữ `BAO_GIA` đang có.
+2. Đọc `NASTELEID`. Không ghi dữ liệu sản phẩm vào sheet này. Catalog API không được đổ vào đây.
+3. Cập nhật `MENU` bằng cách chép `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK` từ hai sheet đó, rồi điền `STATUS`. Mã `SXN-01` / `NST-01` trên `MENU` không lấy từ cột `ID` của bảng con. `BAO_GIA_TONG_HOP` xếp chồng cùng hai nguồn.
+
+Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, `NASTELE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Chưa có vùng `NASTELE` thì dòng tay rơi vào vùng shop đang có. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@admin`.
+
+`STOCK` là số thì `MENU` nhận đúng số đó. Ô ghi `Còn hàng` mà không có số thì giữ số đang có trên `MENU` và `STATUS` là `IN STOCK`. Ô `0` hoặc có chữ `Hết` thì `STOCK` là `0` và `STATUS` là `SOLD OUT`. Tên khách đã thêm hậu tố trong ngoặc, sau dấu `|` hoặc `[`, ví dụ `ChatGPT Plus (1 tháng)`, chỉ nhận `STOCK` và `STATUS`. Giá, tên và mô tả của dòng đó không bị viết lại.
+
+Khi nguồn đọc thành công và còn dòng, dòng `IN STOCK` hoặc `LOW STOCK` không còn khớp sản phẩm nào trong đúng vùng được đưa về `0` / `SOLD OUT`. Dòng không bị xóa. `CONTACT` giữ nguyên. API shop lỗi, `BAO_GIA` rỗng, hoặc `NASTELEID` không có dòng dữ liệu thì không đưa các dòng còn lại của nguồn đó về 0.
 
 ## Không copy từ file catalog
 
 | Cột trên catalog | Vì sao sai nếu dán sang tổng hợp | Cột đúng trên file tổng hợp |
 | --- | --- | --- |
-| `Giá gốc` / `Giá thấp nhất (VND)` / `Retail Cost (VND)` | Đó là giá vốn. | `Giá bán` |
+| `Giá gốc` / `Giá thấp nhất (VND)` / `Retail Cost (VND)` | Đó là giá vốn. | `PRICE` |
 | `Lợi nhuận (VND)` / `Tỷ lệ lợi nhuận (%)` | Nội bộ, không hiện cho khách. | (không có) |
-| `Product ID` / `Variant ID` tách cột | Khóa tổng hợp là một ô `Mã`. | `Mã` |
-| `Tên biến thể` tách cột | File tổng hợp ghép vào tên. | `Tên sản phẩm` |
-| `Trạng thái hàng` / `Availability` | Tên cột khác, map lệch. | `Tình trạng` |
+| `Product ID` / `Variant ID` / `local_…` | Không đưa mã nội bộ lên bảng khách. | `ID` |
+| `Tên biến thể` tách cột | File tổng hợp ghép vào tên. | `PRODUCT` |
+| `Trạng thái hàng` / `Availability` | Tên cột khác. | `STOCK` |
 
-Nếu tab `NASTELEID` vẫn còn cột giá vốn, lệnh **không** lấy các cột đó. Chỉ đọc `Giá bán`. Dòng có `Nguồn` = `Shop Xoài Non` trên `NASTELEID` bị bỏ.
+Nếu tab `NASTELEID` vẫn còn cột giá vốn, lệnh **không** lấy các cột đó. Chỉ đọc `PRICE`. Bảng cũ còn cột `Nguồn` thì dòng đúng `Shop Xoài Non` bị bỏ.
 
 ## Config
 
 | Việc | File / ô | Ghi chú |
 | --- | --- | --- |
 | Bật file tổng hợp | `.env` → `LAST_SPREADSHEET_ID` | File Google đã có, đã chia sẻ quyền Sửa cho service account. |
-| Sửa giá Nastele | Tab `NASTELEID`, cột `Giá bán` | Số nguyên VND. Tool không làm tròn lại. |
-| Sửa gói Nastele | Tab `NASTELEID`, cột `Cấu hình` | Tự do, một dòng. |
+| Sửa giá Nastele | Tab `NASTELEID`, cột `PRICE` | Số nguyên VND. Tool không làm tròn lại. |
+| Sửa thời hạn / bảo hành | Tab `NASTELEID`, cột `DURATION` và `WARRANTY` | Chép nguyên văn lên `MENU`. |
 | Xem giá shop | Tab `BAO_GIA` | Đổi bằng `sync` / `report`, không gõ tay. |
-| Xem bảng khách | Tab `BAO_GIA_TONG_HOP` | Đổi bằng `sync` / `report`. |
+| Xem bảng khách | Tab `MENU` | Ghép từ `BAO_GIA` và `NASTELEID`. Đổi bằng `sync`, `report` hoặc `sync-menu`. |
 | Tỷ lệ lợi nhuận shop | `.env` `PRICING_*` | Chỉ ảnh hưởng `BAO_GIA`, không đổi số đã gõ trên `NASTELEID`. |
 | Dry-run | `DRY_RUN=true` | Lập kế hoạch, không ghi ô. |

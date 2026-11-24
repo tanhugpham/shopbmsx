@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sync_menu = commands.add_parser(
         "sync-menu",
-        help="Đồng bộ nguồn vào MENU. Chỉ ghi ô sản phẩm. DRY_RUN không ghi.",
+        help="Ghi BAO_GIA từ API shop, đọc NASTELEID, cập nhật MENU. Không ghi dữ liệu NASTELEID.",
     )
     sync_menu.set_defaults(func=command_sync_menu)
 

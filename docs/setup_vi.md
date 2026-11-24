@@ -167,14 +167,14 @@ Hai file Google tách nhau. Không copy dòng từ file catalog sang file tổng
 | File | Biến | Tab bạn xem / sửa |
 | --- | --- | --- |
 | Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`. Nội bộ, có giá gốc. |
-| Báo giá tổng hợp | `LAST_SPREADSHEET_ID` | `NASTELEID` (sửa tay), `BAO_GIA` (tool), `BAO_GIA_TONG_HOP` (tool). |
+| Báo giá tổng hợp | `LAST_SPREADSHEET_ID` | `NASTELEID` (sửa tay), `BAO_GIA` (tool, từ API), `MENU` (ghép hai tab trên), `BAO_GIA_TONG_HOP` (tool). |
 
-`NASTELEID` và `BAO_GIA` khóa **cùng một dòng tiêu đề**. ID là `STT`, không lấy `local_id` API.
+`NASTELEID` và `BAO_GIA` khóa **cùng một dòng tiêu đề** với các cột sản phẩm của `MENU`. `ID` là số thứ tự, không lấy `local_id` API. `MENU` thêm cột `STATUS`.
 
-| STT | Nguồn | Tên sản phẩm | Tên biến thể | Mô tả | Giá bán | Tình trạng |
+| ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `NASTELEID` | tên khách thấy | gói / thời hạn | mô tả tay | giá đã gõ | `Còn hàng` / `Hết hàng` |
-| 1 | `Shop Xoài Non` | `title` | `title` biến thể | `description` | giá đã làm tròn đẹp | tool ghi |
+| 1 | tên khách thấy | mô tả tay | thời hạn | bảo hành | giá đã gõ | số lượng |
+| 1 | tên shop đã ghép biến thể | `description` | suy ra từ tên | suy ra từ tên | giá đã làm tròn đẹp | số lượng API |
 
 Không đặt `Giá gốc` hay `Product ID` vào file này. Bảng đầy đủ: [bao_gia_tong_hop.md](bao_gia_tong_hop.md).
 

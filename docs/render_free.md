@@ -73,8 +73,8 @@ Render Free không có Cron (Cron là gói trả phí). Không bật dịch vụ
 
 Hai lớp, cùng một lệnh `sync-menu`:
 
-1. Thread trong Web Service `shopxoainon-web` chạy mỗi 300 giây khi instance đang thức. Ghi **ô Description/sản phẩm MENU**, không tắt khóa mua hàng. `DRY_RUN=true` vẫn giữ cho catalog; `ENABLE_SCHEDULED_MENU_LIVE=true` cho phép ghi MENU.
-2. GitHub Actions `.github/workflows/sync-menu.yml` cron `*/5 * * * *` chạy `python -m shop_integration sync-menu`. Đây là đồng hồ miễn phí khi Free instance ngủ sau 15 phút không có HTTP.
+1. Thread trong Web Service `shopxoainon-web` chạy mỗi 300 giây khi instance đang thức. Lệnh ghi `BAO_GIA` từ API Shop Xoài Non, đọc `NASTELEID`, rồi cập nhật `MENU` từ hai sheet đó. Không ghi dữ liệu sản phẩm vào `NASTELEID`. `DRY_RUN=true` vẫn giữ cho catalog; `ENABLE_SCHEDULED_MENU_LIVE=true` cho phép ghi file báo giá.
+2. GitHub Actions `.github/workflows/sync-menu.yml` cron `*/5 * * * *` chạy `python -m shop_integration sync-menu` với `DRY_RUN=false`. Đây là đồng hồ miễn phí khi Free instance ngủ sau 15 phút không có HTTP.
 
 Cần secret `LAST_SPREADSHEET_ID` trên GitHub Actions. Không dùng `setInterval` trình duyệt. Không ping liên tục để giả Cron.
 
