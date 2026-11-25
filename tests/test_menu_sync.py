@@ -30,7 +30,7 @@ def test_interval_is_five_minutes() -> None:
 def test_overlapping_sync_is_skipped() -> None:
     assert _lock.acquire(blocking=False)
     try:
-        result = run_menu_sync(make_settings(last_spreadsheet_id="last-id"), live=False)
+        result = run_menu_sync(make_settings(google_spreadsheet_id="last-id"), live=False)
         assert result.status == "locked"
         assert result.cells_written == 0
     finally:
@@ -42,7 +42,7 @@ def test_shop_error_sanitizes_existing_menu_and_keeps_headers() -> None:
     grid[10][2] = "Inbox admin @tiensky123 để nhận mã."
     gateway = _menu_book(grid)
     result = run_menu_sync(
-        make_settings(last_spreadsheet_id="last-id", google_spreadsheet_id=""),
+        make_settings(google_spreadsheet_id="last-id"),
         live=True,
         gateway=gateway,
         shop_client=BoomShop(),
@@ -61,7 +61,7 @@ def test_shop_error_sanitizes_existing_menu_and_keeps_headers() -> None:
 
 def test_retry_does_not_duplicate_menu_rows() -> None:
     gateway = _menu_book()
-    settings = make_settings(last_spreadsheet_id="last-id", google_spreadsheet_id="")
+    settings = make_settings(google_spreadsheet_id="last-id")
     first = run_menu_sync(settings, live=True, gateway=gateway, shop_client=EmptyShop())
     before = [row[:] for row in gateway.values[TAB_MENU]]
     second = run_menu_sync(settings, live=True, gateway=gateway, shop_client=EmptyShop())
@@ -96,7 +96,7 @@ class StockShop:
 def test_scheduled_menu_sync_updates_menu_from_sheets() -> None:
     gateway = _menu_book()
     result = run_menu_sync(
-        make_settings(last_spreadsheet_id="last-id", google_spreadsheet_id=""),
+        make_settings(google_spreadsheet_id="last-id"),
         live=True,
         gateway=gateway,
         shop_client=StockShop(),
@@ -119,6 +119,17 @@ def test_scheduled_menu_sync_updates_menu_from_sheets() -> None:
     assert claude[1] == "Claude"
     assert claude[6] == 0
     assert claude[7] == "SOLD OUT"
+
+
+def test_scheduled_menu_live_requires_explicit_opt_in(monkeypatch) -> None:
+    from shop_integration.menu_sync import scheduled_menu_live
+
+    monkeypatch.delenv("ENABLE_SCHEDULED_MENU_LIVE", raising=False)
+    assert scheduled_menu_live() is False
+    monkeypatch.setenv("ENABLE_SCHEDULED_MENU_LIVE", "true")
+    assert scheduled_menu_live() is True
+    monkeypatch.setenv("ENABLE_SCHEDULED_MENU_LIVE", "false")
+    assert scheduled_menu_live() is False
 
 
 def test_disabled_scheduler_does_not_start(monkeypatch) -> None:

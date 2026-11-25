@@ -1,6 +1,6 @@
-# UI thống nhất: file catalog và file báo giá tổng hợp
+# UI thống nhất: một spreadsheet cho catalog và báo giá
 
-Hai file Google là hai việc khác nhau. Copy dòng từ file catalog sang file tổng hợp sẽ đưa giá vốn, mã nội bộ hoặc tên cột sai vào bảng khách.
+Phase 4.3B dùng một spreadsheet `GOOGLE_SPREADSHEET_ID` cho catalog, nguồn, MENU và báo giá. Copy dòng từ tab catalog sang tab khách vẫn sai: sẽ đưa giá vốn, mã nội bộ hoặc tên cột sai vào bảng khách.
 
 In bảng này trên máy:
 
@@ -9,14 +9,15 @@ $env:PYTHONPATH = "src"
 python -m shop_integration quote-layout
 ```
 
-## Hai file
+## Một file, nhiều khu vực tab
 
-| File | Biến môi trường | Tab liên quan | Ai ghi | Bạn làm gì |
+| Khu vực | Biến môi trường | Tab liên quan | Ai ghi | Bạn làm gì |
 | --- | --- | --- | --- | --- |
-| Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`, `LICH_SU_GIA`, `NHAT_KY_DONG_BO`, `CAU_HINH` | Tool ghi khi `sync` | Xem giá gốc, tồn kho, cấu hình nội bộ. Không copy sang file tổng hợp. |
-| Báo giá chính thức | `LAST_SPREADSHEET_ID` | `MENU`, `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | `NASTELEID` chỉ nhập tay. Tool ghi `BAO_GIA` từ API, rồi ghi `MENU` và `BAO_GIA_TONG_HOP` từ hai sheet đó | Nhập sản phẩm tay trên `NASTELEID`. Xem giá khách trên `MENU`. Không sửa cột A–H của `MENU`. |
+| Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`, `LICH_SU_GIA`, `NHAT_KY_DONG_BO`, `CAU_HINH` | Tool ghi khi `sync` | Xem giá gốc, tồn kho, cấu hình nội bộ. Không copy sang bảng khách. |
+| Nguồn và ghép sản phẩm | `GOOGLE_SPREADSHEET_ID` | `SO_SANH_NGUON`, `BANG_GIA_TOI_UU`, `CAN_GHEP_SAN_PHAM` | Tool ghi khi `sync-sources` | Duyệt cặp cần ghép. `BANG_GIA_TOI_UU` là bảng khách của nhánh nguồn. |
+| Báo giá chính thức | `GOOGLE_SPREADSHEET_ID` | `MENU`, `NASTELEID`, `BAO_GIA`, `BAO_GIA_TONG_HOP` | `NASTELEID` chỉ nhập tay. Tool ghi `BAO_GIA` từ API, rồi ghi `MENU` và `BAO_GIA_TONG_HOP` từ hai sheet đó | Nhập sản phẩm tay trên `NASTELEID`. Xem giá khách trên `MENU`. Không sửa cột A–H của `MENU`. |
 
-File tổng hợp để trống `LAST_SPREADSHEET_ID` thì lệnh bỏ qua, không tạo file mới.
+Thiếu `GOOGLE_SPREADSHEET_ID` thì lệnh bỏ qua, không tạo file mới. `NASTELE_SPREADSHEET_ID` và `LAST_SPREADSHEET_ID` đã bỏ; nếu còn trong môi trường thì bị bỏ qua và `config-check` báo tên biến.
 
 ## Cột khóa trên NASTELEID và BAO_GIA
 
@@ -50,6 +51,11 @@ Tool khóa dòng 1 và định dạng. Không ghi dữ liệu từ dòng 2.
 
 Không sửa tay các cột A–G. Không có `local_id`.
 
+> **Cảnh báo Phase 4.3D/4.3E:** bản `BAO_GIA` đang có dữ liệu lệch cột (cột B là `Shop Xoài Non`,
+> tên sản phẩm nằm ở C). Tool đã phát hiện và **từ chối đọc/ghi** BAO_GIA/BAO_GIA_TONG_HOP
+> cho tới khi sửa theo đúng mẫu trên. Phase 4.3E đã lập kế hoạch dựng lại hai tab từ
+> ProductID/VariantID, chưa ghi Google. Xem `docs/phase43e_migration.md`.
+
 ## Mẫu dòng BAO_GIA_TONG_HOP (tool ghi)
 
 | ID | PRODUCT | DESCRIPTION | DURATION | WARRANTY | PRICE | STOCK |
@@ -68,6 +74,8 @@ Hai nguồn xếp chồng. `ID` trên bảng này được đánh lại từ 1. 
 3. Cập nhật `MENU` bằng cách chép `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK` từ hai sheet đó, rồi điền `STATUS`. Mã `SXN-01` / `NST-01` trên `MENU` không lấy từ cột `ID` của bảng con. `BAO_GIA_TONG_HOP` xếp chồng cùng hai nguồn.
 
 Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, `NASTELE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Chưa có vùng `NASTELE` thì dòng tay rơi vào vùng shop đang có. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@admin`.
+
+Từ Phase 4.3B, trước khi ghi MENU tool đọc cấu trúc thật: 62 vùng gộp, công thức, dropdown và khổ cột/dòng. Ô nằm trong vùng gộp hoặc có công thức bị từ chối; cột I–M bị từ chối; không gửi `batchUpdate` nào chạm MENU; không append dòng. Sản phẩm shop vượt số hàng trống của đúng danh mục thì dừng cả lượt ghi, không đè layout. Baseline và lệnh `menu-baseline` nằm ở [phase43b_single_spreadsheet.md](phase43b_single_spreadsheet.md#9-khóa-layout-menu-phase-43b).
 
 `STOCK` là số thì `MENU` nhận đúng số đó. Ô ghi `Còn hàng` mà không có số thì giữ số đang có trên `MENU` và `STATUS` là `IN STOCK`. Ô `0` hoặc có chữ `Hết` thì `STOCK` là `0` và `STATUS` là `SOLD OUT`. Tên khách đã thêm hậu tố trong ngoặc, sau dấu `|` hoặc `[`, ví dụ `ChatGPT Plus (1 tháng)`, chỉ nhận `STOCK` và `STATUS`. Giá, tên và mô tả của dòng đó không bị viết lại.
 
@@ -89,7 +97,7 @@ Nếu tab `NASTELEID` vẫn còn cột giá vốn, lệnh **không** lấy các 
 
 | Việc | File / ô | Ghi chú |
 | --- | --- | --- |
-| Bật file tổng hợp | `.env` → `LAST_SPREADSHEET_ID` | File Google đã có, đã chia sẻ quyền Sửa cho service account. |
+| Bật file Google | `.env` → `GOOGLE_SPREADSHEET_ID` | File Google đã có, đã chia sẻ quyền Sửa cho service account. Chỉ dùng một ID. |
 | Sửa giá Nastele | Tab `NASTELEID`, cột `PRICE` | Số nguyên VND. Tool không làm tròn lại. |
 | Sửa thời hạn / bảo hành | Tab `NASTELEID`, cột `DURATION` và `WARRANTY` | Chép nguyên văn lên `MENU`. |
 | Xem giá shop | Tab `BAO_GIA` | Đổi bằng `sync` / `report`, không gõ tay. |

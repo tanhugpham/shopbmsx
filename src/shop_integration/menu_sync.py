@@ -13,19 +13,32 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from shop_integration.api_client import ShopApiClient
-from shop_integration.combined_quote import CombinedQuoteWriter, shop_quote_rows
+from shop_integration.combined_quote import (
+    MENU_HEADERS,
+    CombinedQuoteWriter,
+    shop_quote_rows,
+)
 from shop_integration.config import Settings
-from shop_integration.google_auth import WORKSPACE_SCOPES, load_service_account_credentials
+from shop_integration.errors import MenuLayoutError
 from shop_integration.logging_utils import redact
+from shop_integration.menu_layout import (
+    LayoutLockedGateway,
+    MenuLayoutGuard,
+    load_menu_baseline,
+    menu_structure_diff,
+    read_menu_baseline,
+)
 from shop_integration.pricing import policy_from_settings
 from shop_integration.product_service import ProductService
-from shop_integration.sheets_service import GoogleSheetsGateway
+from shop_integration.sheet_io import cell_range
 from shop_integration.text_normalize import contains_contact_handle, public_description
 from shop_integration.time_utils import format_timestamp, now_vietnam
+from shop_integration.workspace import open_sheets
 
 INTERVAL_SECONDS = 300
 _DESCRIPTION_COLUMNS = {
-    "MENU": ("DESCRIPTION",),
+    # MENU do CombinedQuoteWriter làm sạch trong giới hạn A:H/selector. Không quét lại
+    # toàn tab ở đây để tránh ghi C36 hoặc các dòng ngoài vùng chọn.
     "SAN_PHAM": ("Mô tả ngắn",),
     "BIEN_THE": ("Mô tả", "Mô tả gốc"),
     "BAO_GIA": ("Mô tả",),
@@ -86,7 +99,9 @@ def scheduled_sync_enabled() -> bool:
 
 
 def scheduled_menu_live() -> bool:
-    return _flag(os.environ.get("ENABLE_SCHEDULED_MENU_LIVE", "true"), default=True)
+    """Mặc định không ghi. Chỉ bật khi đặt ENABLE_SCHEDULED_MENU_LIVE=true."""
+
+    return _flag(os.environ.get("ENABLE_SCHEDULED_MENU_LIVE"), default=False)
 
 
 def scheduled_sync_seconds() -> int:
@@ -181,46 +196,55 @@ def _run_menu_sync(
     cells_written = 0
     menu_count = 0
     applied = False
-    spreadsheet_id = settings.last_spreadsheet_id.strip()
+    spreadsheet_id = settings.spreadsheet_id
     if not spreadsheet_id:
-        errors.append("Thiếu LAST_SPREADSHEET_ID.")
+        errors.append("Thiếu GOOGLE_SPREADSHEET_ID.")
     elif gateway is None:
         errors.append("Thiếu kết nối Google Sheets.")
     else:
+        layout_guard: MenuLayoutGuard | None = None
+        layout_blocked = False
         try:
-            result = CombinedQuoteWriter(gateway, spreadsheet_id).update(
-                shop_rows,
-                dry_run=not live,
-                expire_missing=True,
-            )
-            applied = result.applied
-            menu_count = result.menu_count
-            manual_count = result.manual_count
-            cells_written += len(result.ranges)
-            notes.extend(item for item in result.warnings if item)
-            leftover, extra_cells = _sanitize_description_tabs(
+            layout_guard = _menu_layout_guard(
                 gateway,
                 spreadsheet_id,
-                live=live,
+                started_text,
+                notes,
             )
-            cells_written += extra_cells
-            catalog_id = settings.google_spreadsheet_id.strip()
-            if catalog_id:
-                _left, extra = _sanitize_description_tabs(
-                    gateway,
-                    catalog_id,
-                    live=live,
-                    tabs=("SAN_PHAM", "BIEN_THE"),
+        except MenuLayoutError as exc:
+            errors.append(str(exc))
+            layout_blocked = True
+        if not layout_blocked:
+            guarded = (
+                LayoutLockedGateway(gateway, layout_guard) if layout_guard else gateway
+            )
+            try:
+                result = CombinedQuoteWriter(
+                    guarded,
+                    spreadsheet_id,
+                    layout_guard=layout_guard,
+                ).update(
+                    shop_rows,
+                    dry_run=not live,
+                    expire_missing=True,
                 )
-                leftover += _left
-                cells_written += extra
-        except Exception as exc:
-            errors.append(f"Ghi MENU lỗi: {exc}")
-        finally:
-            if own_gateway:
-                close = getattr(gateway, "close", None)
-                if callable(close):
-                    close()
+                applied = result.applied
+                menu_count = result.menu_count
+                manual_count = result.manual_count
+                cells_written += len(result.ranges)
+                notes.extend(item for item in result.warnings if item)
+                leftover, extra_cells = _sanitize_description_tabs(
+                    guarded,
+                    spreadsheet_id,
+                    live=live,
+                )
+                cells_written += extra_cells
+            except Exception as exc:
+                errors.append(f"Ghi MENU lỗi: {exc}")
+        if own_gateway:
+            close = getattr(gateway, "close", None)
+            if callable(close):
+                close()
 
     finished_text = format_timestamp(now_vietnam())
     status = "error" if errors and not applied and cells_written == 0 else "ok"
@@ -259,11 +283,52 @@ def _load_shop_products(settings: Settings, shop_client: Any | None) -> tuple[li
         return products, notes
 
 
-def _open_gateway(settings: Settings) -> GoogleSheetsGateway | None:
-    if not settings.google_credentials_file:
+def _open_gateway(settings: Settings):
+    return open_sheets(settings)
+
+
+def _menu_layout_guard(
+    gateway: Any,
+    spreadsheet_id: str,
+    captured_at: str,
+    notes: list[str],
+) -> MenuLayoutGuard | None:
+    """Đọc cấu trúc MENU một lần. Không đọc được thì vẫn áp whitelist tĩnh A:H."""
+
+    try:
+        baseline = read_menu_baseline(
+            gateway,
+            spreadsheet_id,
+            MENU_HEADERS,
+            captured_at=captured_at,
+        )
+    except MenuLayoutError as exc:
+        notes.append(f"Không đọc được cấu trúc MENU: {exc} Vẫn áp whitelist A:H.")
         return None
-    credentials = load_service_account_credentials(settings.google_credentials_file, WORKSPACE_SCOPES)
-    return GoogleSheetsGateway(credentials)
+    except Exception as exc:  # gateway lỗi tạm thời không được chặn toàn bộ sync
+        notes.append(
+            f"Không đọc được cấu trúc MENU ({type(exc).__name__}). Vẫn áp whitelist A:H."
+        )
+        return None
+    notes.append(
+        f"MENU layout: {baseline.merge_count} vùng gộp, "
+        f"{len(baseline.formulas)} công thức, "
+        f"{len(baseline.data_validations)} dropdown, "
+        f"{len(baseline.protected_ranges)} vùng bảo vệ, "
+        f"{baseline.data_rows} dòng dữ liệu."
+    )
+    baseline_path = os.environ.get("MENU_BASELINE_FILE", "").strip()
+    if baseline_path:
+        saved = load_menu_baseline(baseline_path)
+        differences = menu_structure_diff(saved, baseline)
+        if differences:
+            shown = "; ".join(differences[:5])
+            more = f" (+{len(differences) - 5} khác biệt nữa)" if len(differences) > 5 else ""
+            raise MenuLayoutError(
+                f"MENU lệch baseline '{baseline_path}': {shown}{more}. Không ghi ô nào."
+            )
+        notes.append(f"MENU khớp baseline '{baseline_path}'.")
+    return MenuLayoutGuard.from_baseline(baseline)
 
 
 def _sanitize_description_tabs(
@@ -295,16 +360,7 @@ def _sanitize_description_tabs(
             for name in _DESCRIPTION_COLUMNS[tab]
             if name in headers
         ]
-        if tab == "MENU":
-            columns = [2]
-            start = 1
-            for index, row in enumerate(grid):
-                cells = [str(cell or "").strip().upper() for cell in row[:8]]
-                if cells[:2] == ["ID", "PRODUCT"]:
-                    start = index + 1
-                    break
-        else:
-            start = 1
+        start = 1
         for row_number, raw in enumerate(grid[start:], start=start + 1):
             for column in columns:
                 current = raw[column] if column < len(raw) else ""
@@ -312,22 +368,13 @@ def _sanitize_description_tabs(
                     continue
                 cleaned = public_description(current)
                 if cleaned != current:
-                    payload.append((_a1(tab, column, row_number), [[cleaned]]))
+                    payload.append((cell_range(tab, column, row_number), [[cleaned]]))
                 remaining = cleaned if live else current
                 if contains_contact_handle(remaining):
                     leftover += 1
     if live and payload:
         gateway.batch_update_values(spreadsheet_id, payload, value_input_option="RAW")
     return leftover, len(payload) if live else 0
-
-
-def _a1(tab: str, column: int, row: int) -> str:
-    number = column + 1
-    name = ""
-    while number:
-        number, remainder = divmod(number - 1, 26)
-        name = chr(65 + remainder) + name
-    return f"'{tab}'!{name}{row}"
 
 
 def _remember(result: MenuSyncResult) -> None:

@@ -190,7 +190,7 @@ def test_empty_catalog_does_not_delete_old_rows_or_reselect_supplier() -> None:
     memory = MemoryGateway(titles=[TAB_COMPARE], values={TAB_COMPARE: [headers, paired, lone]})
     shop = ProviderResult(SUPPLIER_SHOP, [_shop_offer(), _shop_offer("local_24")])
     nastele = ProviderResult(SUPPLIER_NASTELE, [], catalog_status=NASTELE_CATALOG_EMPTY)
-    settings = make_settings(dry_run=True, google_spreadsheet_id="sheet", nastele_spreadsheet_id="nastele-sheet")
+    settings = make_settings(dry_run=True, google_spreadsheet_id="sheet")
     nastele_memory = MemoryGateway(
         titles=[TAB_PRODUCTS],
         values={TAB_PRODUCTS: [["Product ID", "Stock Quantity"], ["43", 40]]},
@@ -327,7 +327,7 @@ def test_github_actions_live_sync_stays_blocked_without_a_google_write(monkeypat
             called["backup"] = True
             return {"status": "verified"}
 
-    settings = make_settings(dry_run=False, google_spreadsheet_id="sheet", nastele_spreadsheet_id="nastele")
+    settings = make_settings(dry_run=False, google_spreadsheet_id="sheet")
     with pytest.raises(ConfigError, match="chưa đủ điều kiện"):
         SourceSyncService(
             settings,

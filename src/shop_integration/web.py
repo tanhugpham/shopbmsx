@@ -24,6 +24,9 @@ def apply_runtime_guards() -> None:
     os.environ["DRY_RUN"] = "true"
     os.environ["ENABLE_PURCHASE"] = "false"
     os.environ["ENABLE_TELEGRAM"] = "false"
+    # Phase 4.3F: deployment không được tự bật scheduler hoặc ghi Google.
+    os.environ["ENABLE_SCHEDULED_SYNC"] = "false"
+    os.environ["ENABLE_SCHEDULED_MENU_LIVE"] = "false"
     os.environ.setdefault("PYTHONPATH", "src")
 
 

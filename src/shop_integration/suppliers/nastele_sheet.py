@@ -1,4 +1,4 @@
-"""Spreadsheet riêng của Nastele. Không ghi tab Shop Xoài Non và không lưu API key."""
+﻿"""Spreadsheet riêng của Nastele. Không ghi tab Shop Xoài Non và không lưu API key."""
 
 from __future__ import annotations
 
@@ -11,12 +11,13 @@ from shop_integration.errors import BackupError, ConfigError
 from shop_integration.time_utils import format_timestamp, now_vietnam
 from shop_integration.logging_utils import redact
 from shop_integration.product_service import ABSENT_LABEL, MISSING_TEXT, NULL_LABEL
+from shop_integration.sheet_format import apply_tab_formatting, build_format_requests
+from shop_integration.sheet_io import ensure_tabs, read_table
 from shop_integration.sheet_layout import (
     ALL_TABS,
     SheetTable,
     grid_from_records,
     merge_config,
-    records_from_grid,
     stamp_stt,
 )
 from shop_integration.suppliers.models import SUPPLIER_NASTELE, NormalizedOffer
@@ -59,192 +60,13 @@ LOG_HEADERS = ["Thời điểm", "Sự kiện", "Chi tiết"]
 CONFIG_HEADERS = ["Khóa", "Giá trị"]
 
 _ID_COLUMNS = {"Product ID", "Khóa"}
-_CURRENCY = {"Retail Cost (VND)", "Wholesale Unit Price", "Giá cũ (VND)", "Giá mới (VND)"}
-HEADER_BLUE = {"red": 0.05, "green": 0.16, "blue": 0.36}
-_WIDTHS = {
-    "Product Name": 280,
-    "Description": 320,
-    "Product Description": 320,
-    "Availability": 150,
-    "Last Updated": 180,
-    "Chi tiết": 360,
+FORMAT_HEADERS = {
+    TAB_PRODUCTS: PRODUCT_HEADERS,
+    TAB_TIERS: TIER_HEADERS,
+    TAB_HISTORY: HISTORY_HEADERS,
+    TAB_LOG: LOG_HEADERS,
+    TAB_CONFIG: CONFIG_HEADERS,
 }
-
-
-def build_format_requests(
-    sheet_id: int,
-    headers: list[str],
-    row_count: int,
-    *,
-    banding_ids: list[int] | None = None,
-    conditional_format_count: int = 0,
-) -> list[dict[str, Any]]:
-    """Tô header, đóng băng, lọc, dải màu, tiền tệ và tồn kho. Không chứa bí mật."""
-
-    requests: list[dict[str, Any]] = []
-    for band_id in banding_ids or []:
-        requests.append({"deleteBanding": {"bandedRangeId": band_id}})
-    for index in range(conditional_format_count - 1, -1, -1):
-        requests.append({"deleteConditionalFormatRule": {"sheetId": sheet_id, "index": index}})
-    columns = max(len(headers), 1)
-    end_row = max(row_count, 2)
-    header_range = {
-        "sheetId": sheet_id,
-        "startRowIndex": 0,
-        "endRowIndex": 1,
-        "startColumnIndex": 0,
-        "endColumnIndex": columns,
-    }
-    requests.append(
-        {
-            "repeatCell": {
-                "range": header_range,
-                "cell": {
-                    "userEnteredFormat": {
-                        "backgroundColor": HEADER_BLUE,
-                        "textFormat": {
-                            "bold": True,
-                            "foregroundColor": {"red": 1, "green": 1, "blue": 1},
-                        },
-                        "wrapStrategy": "WRAP",
-                        "horizontalAlignment": "CENTER",
-                    }
-                },
-                "fields": "userEnteredFormat(backgroundColor,textFormat,wrapStrategy,horizontalAlignment)",
-            }
-        }
-    )
-    requests.append(
-        {
-            "updateSheetProperties": {
-                "properties": {"sheetId": sheet_id, "gridProperties": {"frozenRowCount": 1}},
-                "fields": "gridProperties.frozenRowCount",
-            }
-        }
-    )
-    requests.append(
-        {
-            "setBasicFilter": {
-                "filter": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": end_row,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": columns,
-                    }
-                }
-            }
-        }
-    )
-    requests.append(
-        {
-            "addBanding": {
-                "bandedRange": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 0,
-                        "endRowIndex": end_row,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": columns,
-                    },
-                    "rowProperties": {
-                        "headerColor": HEADER_BLUE,
-                        "firstBandColor": {"red": 1, "green": 1, "blue": 1},
-                        "secondBandColor": {"red": 0.90, "green": 0.94, "blue": 0.98},
-                    },
-                }
-            }
-        }
-    )
-    if end_row > 1:
-        requests.append(
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 1,
-                        "endRowIndex": end_row,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": columns,
-                    },
-                    "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP"}},
-                    "fields": "userEnteredFormat.wrapStrategy",
-                }
-            }
-        )
-    for name in _CURRENCY:
-        if name not in headers:
-            continue
-        column = headers.index(name)
-        requests.append(
-            {
-                "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 1,
-                        "endRowIndex": end_row,
-                        "startColumnIndex": column,
-                        "endColumnIndex": column + 1,
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
-                        }
-                    },
-                    "fields": "userEnteredFormat.numberFormat",
-                }
-            }
-        )
-    if "Stock Quantity" in headers and end_row > 1:
-        column = headers.index("Stock Quantity")
-        stock_range = {
-            "sheetId": sheet_id,
-            "startRowIndex": 1,
-            "endRowIndex": end_row,
-            "startColumnIndex": column,
-            "endColumnIndex": column + 1,
-        }
-        requests.append(_stock_rule(stock_range, "NUMBER_EQ", "0", 0.96, 0.80, 0.80))
-        requests.append(_stock_rule(stock_range, "NUMBER_GREATER", "0", 0.80, 0.93, 0.80))
-    for index, header in enumerate(headers):
-        requests.append(
-            {
-                "updateDimensionProperties": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "dimension": "COLUMNS",
-                        "startIndex": index,
-                        "endIndex": index + 1,
-                    },
-                    "properties": {"pixelSize": _WIDTHS.get(header, 150)},
-                    "fields": "pixelSize",
-                }
-            }
-        )
-    return requests
-
-
-def _stock_rule(
-    cell_range: dict[str, int],
-    condition: str,
-    value: str,
-    red: float,
-    green: float,
-    blue: float,
-) -> dict[str, Any]:
-    return {
-        "addConditionalFormatRule": {
-            "rule": {
-                "ranges": [cell_range],
-                "booleanRule": {
-                    "condition": {"type": condition, "values": [{"userEnteredValue": value}]},
-                    "format": {"backgroundColor": {"red": red, "green": green, "blue": blue}},
-                },
-            },
-            "index": 0,
-        }
-    }
 
 
 class NasteleSheetWriter:
@@ -257,7 +79,7 @@ class NasteleSheetWriter:
         secrets: list[str] | None = None,
     ) -> None:
         if not str(spreadsheet_id).strip():
-            raise ConfigError("Thiếu NASTELE_SPREADSHEET_ID.")
+            raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
         self.gateway = gateway
         self.spreadsheet_id = str(spreadsheet_id).strip()
         self.dry_run = dry_run
@@ -266,7 +88,16 @@ class NasteleSheetWriter:
 
     def prepare(self) -> list[str]:
         for title in NASTELE_TABS:
-            self._ensure(title)
+            _assert_nastele_tab(title)
+        missing = ensure_tabs(
+            self.gateway,
+            self.spreadsheet_id,
+            NASTELE_TABS,
+            dry_run=self.dry_run,
+        )
+        for title in missing:
+            if title not in self.tabs_to_create:
+                self.tabs_to_create.append(title)
         return list(self.tabs_to_create)
 
     def apply(
@@ -303,22 +134,19 @@ class NasteleSheetWriter:
 
     def _read(self, tab: str) -> SheetTable:
         _assert_nastele_tab(tab)
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
-        if tab not in titles:
-            return SheetTable()
-        return records_from_grid(self.gateway.get_values(self.spreadsheet_id, f"'{tab}'!A:ZZ"))
+        return read_table(self.gateway, self.spreadsheet_id, tab)
 
     def _ensure(self, title: str) -> None:
         _assert_nastele_tab(title)
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
-        if title in titles:
-            return
-        if self.dry_run:
-            if title not in self.tabs_to_create:
-                self.tabs_to_create.append(title)
-            return
-        self.gateway.add_sheet(self.spreadsheet_id, title)
-        self.tabs_to_create.append(title)
+        missing = ensure_tabs(
+            self.gateway,
+            self.spreadsheet_id,
+            (title,),
+            dry_run=self.dry_run,
+        )
+        for name in missing:
+            if name not in self.tabs_to_create:
+                self.tabs_to_create.append(name)
 
     def _write(self, tab: str, grid: list[list[Any]]) -> None:
         _assert_nastele_tab(tab)
@@ -355,35 +183,12 @@ class NasteleSheetWriter:
     def _format_tabs(self) -> None:
         if self.dry_run:
             return
-        meta_fn = getattr(self.gateway, "list_sheet_meta", None)
-        update_fn = getattr(self.gateway, "batch_update", None)
-        if meta_fn is None or update_fn is None:
-            return
-        meta = {item["title"]: item for item in meta_fn(self.spreadsheet_id)}
-        header_of = {
-            TAB_PRODUCTS: PRODUCT_HEADERS,
-            TAB_TIERS: TIER_HEADERS,
-            TAB_HISTORY: HISTORY_HEADERS,
-            TAB_LOG: LOG_HEADERS,
-            TAB_CONFIG: CONFIG_HEADERS,
-        }
-        requests: list[dict[str, Any]] = []
-        for title, headers in header_of.items():
-            info = meta.get(title)
-            if not info:
-                continue
-            table = self._read(title)
-            requests.extend(
-                build_format_requests(
-                    info["sheetId"],
-                    headers,
-                    max(table.row_count, 1),
-                    banding_ids=list(info.get("bandingIds") or []),
-                    conditional_format_count=int(info.get("conditionalFormatCount") or 0),
-                )
-            )
-        if requests:
-            update_fn(self.spreadsheet_id, requests)
+        apply_tab_formatting(
+            self.gateway,
+            self.spreadsheet_id,
+            FORMAT_HEADERS,
+            self._read,
+        )
 
 
 def snapshot_nastele_values(gateway: Any, spreadsheet_id: str, secrets: list[str]) -> str:

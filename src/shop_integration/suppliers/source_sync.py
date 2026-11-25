@@ -11,13 +11,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from shop_integration.api_client import ShopApiClient
-from shop_integration.config import Settings
 from shop_integration.backup_service import live_sync_block_reason
+from shop_integration.config import Settings
 from shop_integration.errors import ConfigError, IntegrationError, PartialSyncError
 from shop_integration.logging_utils import redact
 from shop_integration.pricing import PricingPolicy, policy_from_settings, quote_cost
 from shop_integration.product_service import ABSENT_LABEL, MISSING_TEXT, NULL_LABEL
-from shop_integration.text_normalize import public_description
+from shop_integration.sheet_format import apply_tab_formatting
+from shop_integration.sheet_io import ensure_tabs, read_table
 from shop_integration.sheet_layout import (
     ALL_TABS,
     SheetTable,
@@ -43,7 +44,7 @@ from shop_integration.suppliers.nastele_client import NasteleClient
 from shop_integration.suppliers.nastele_sheet import snapshot_nastele_values
 from shop_integration.suppliers.providers import NasteleProvider, ShopXoaiNonProvider, safe_fetch
 from shop_integration.suppliers.selection import eligible_unit_cost, select_group
-from shop_integration.text_normalize import FORMULA_PREFIX, guard_formula
+from shop_integration.text_normalize import FORMULA_PREFIX, guard_formula, public_description
 
 TAB_COMPARE = "SO_SANH_NGUON"
 TAB_CUSTOMER = "BANG_GIA_TOI_UU"
@@ -470,18 +471,26 @@ class SourceSheetWriter:
         self.last_customer: list[dict[str, Any]] = []
 
     def read_approvals(self) -> tuple[list[ApprovedMatch], list[str]]:
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
-        if TAB_REVIEW not in titles:
+        table = self._read(TAB_REVIEW)
+        if not table.headers:
             return [], []
-        grid = self.gateway.get_values(self.spreadsheet_id, f"'{TAB_REVIEW}'!A:ZZ")
-        return parse_approvals(records_from_grid(grid))
+        return parse_approvals(table)
 
     def read_records(self, tab: str) -> list[dict[str, Any]]:
         return self._read(tab).records
 
     def prepare(self) -> list[str]:
         for title in SOURCE_TABS:
-            self._ensure(title)
+            assert_source_tab(title)
+        missing = ensure_tabs(
+            self.gateway,
+            self.spreadsheet_id,
+            SOURCE_TABS,
+            dry_run=self.dry_run,
+        )
+        for title in missing:
+            if title not in self.tabs_to_create:
+                self.tabs_to_create.append(title)
         return list(self.tabs_to_create)
 
     def apply(
@@ -537,21 +546,19 @@ class SourceSheetWriter:
 
     def _read(self, tab: str) -> SheetTable:
         assert_source_tab(tab)
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
-        if tab not in titles:
-            return SheetTable()
-        return records_from_grid(self.gateway.get_values(self.spreadsheet_id, f"'{tab}'!A:ZZ"))
+        return read_table(self.gateway, self.spreadsheet_id, tab)
 
     def _ensure(self, title: str) -> None:
         assert_source_tab(title)
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
-        if title in titles:
-            return
-        if self.dry_run:
-            if title not in self.tabs_to_create:
-                self.tabs_to_create.append(title)
-            return
-        self.gateway.add_sheet(self.spreadsheet_id, title)
+        missing = ensure_tabs(
+            self.gateway,
+            self.spreadsheet_id,
+            (title,),
+            dry_run=self.dry_run,
+        )
+        for name in missing:
+            if name not in self.tabs_to_create:
+                self.tabs_to_create.append(name)
 
     def _write(self, tab: str, grid: list[list[Any]]) -> None:
         assert_source_tab(tab)
@@ -566,35 +573,16 @@ class SourceSheetWriter:
     def _format_new_tabs(self) -> None:
         if self.dry_run:
             return
-        meta_fn = getattr(self.gateway, "list_sheet_meta", None)
-        update_fn = getattr(self.gateway, "batch_update", None)
-        if meta_fn is None or update_fn is None:
-            return
-        from shop_integration.suppliers.nastele_sheet import build_format_requests
-
-        meta = {item["title"]: item for item in meta_fn(self.spreadsheet_id)}
-        header_of = {
-            TAB_COMPARE: COMPARE_HEADERS,
-            TAB_CUSTOMER: CUSTOMER_HEADERS,
-            TAB_REVIEW: REVIEW_HEADERS,
-        }
-        requests: list[dict[str, Any]] = []
-        for title, headers in header_of.items():
-            info = meta.get(title)
-            if not info:
-                continue
-            table = self._read(title)
-            requests.extend(
-                build_format_requests(
-                    info["sheetId"],
-                    headers,
-                    max(table.row_count, 1),
-                    banding_ids=list(info.get("bandingIds") or []),
-                    conditional_format_count=int(info.get("conditionalFormatCount") or 0),
-                )
-            )
-        if requests:
-            update_fn(self.spreadsheet_id, requests)
+        apply_tab_formatting(
+            self.gateway,
+            self.spreadsheet_id,
+            {
+                TAB_COMPARE: COMPARE_HEADERS,
+                TAB_CUSTOMER: CUSTOMER_HEADERS,
+                TAB_REVIEW: REVIEW_HEADERS,
+            },
+            self._read,
+        )
 
 
 def assert_source_tab(tab: str) -> None:
@@ -803,10 +791,10 @@ def render_source_report(
         f"Chênh lệch giá đã cộng: {plan.savings}",
         f"Dòng so sánh: {len(plan.catalog_records)}",
     ]
-    if not settings.nastele_spreadsheet_id.strip():
-        lines.append("BLOCKED Google Sheets 2: thiếu NASTELE_SPREADSHEET_ID.")
+    if not settings.spreadsheet_id:
+        lines.append("BLOCKED: thiếu GOOGLE_SPREADSHEET_ID.")
     elif plan.nastele_status:
-        lines.append(f"Google Sheets 2: {plan.nastele_status}")
+        lines.append(f"Google Sheets Nastele: {plan.nastele_status}")
     if plan.sheets_written:
         lines.append("Đã ghi SO_SANH_NGUON, BANG_GIA_TOI_UU và CAN_GHEP_SAN_PHAM.")
     elif settings.dry_run:
@@ -821,7 +809,7 @@ def render_source_report(
 def _nastele_sheet_status(settings: Settings, nastele: ProviderResult, *, writing: bool) -> str:
     if nastele.catalog_status == NASTELE_CATALOG_EMPTY:
         return NASTELE_CATALOG_EMPTY
-    if not settings.nastele_spreadsheet_id.strip():
+    if not settings.spreadsheet_id:
         return "BLOCKED"
     if nastele.blocked or nastele.error:
         return "PRESERVED" if writing and not settings.dry_run else "BLOCKED" if nastele.blocked else "PRESERVED"

@@ -43,9 +43,7 @@ Thêm biến `PYTHON_VERSION` = `3.13.7` (Render mặc định 3.14). Repo có f
 | `GOOGLE_CREDENTIALS_FILE` | `./GOOGLE_CREDENTIALS_FILE.json` |
 | `SHOP_XOAI_NON_API_KEY` | key shop |
 | `NASTELE_API_KEY` | key Nastele |
-| `GOOGLE_SPREADSHEET_ID` | ID file catalog |
-| `NASTELE_SPREADSHEET_ID` | ID file Nastele, nếu có |
-| `LAST_SPREADSHEET_ID` | ID file báo giá tổng hợp |
+| `GOOGLE_SPREADSHEET_ID` | ID spreadsheet duy nhất (catalog, nguồn, MENU, báo giá) |
 | `GOOGLE_DOCUMENT_ID` | ID Google Doc |
 | `GOOGLE_CREDENTIALS_JSON` | nguyên JSON service account |
 | `SYNC_TOKEN` | chuỗi bí mật tự đặt, ví dụ mật khẩu dài 20+ ký tự |
@@ -67,25 +65,26 @@ Invoke-WebRequest -Uri "https://shopxoainon-web.onrender.com/sync-sources" -Meth
 
 Không có token → HTTP 403. Lệnh này **không ghi Google** (`DRY_RUN=true` bị khóa trong code).
 
-## C. Lịch MENU 5 phút
+## C. MENU: không bật lịch ghi trong Phase 4.3F
 
 Render Free không có Cron (Cron là gói trả phí). Không bật dịch vụ trả phí.
 
-Hai lớp, cùng một lệnh `sync-menu`:
+Trong giai đoạn này **không cho scheduler nào ghi Google Sheets/Docs**:
 
-1. Thread trong Web Service `shopxoainon-web` chạy mỗi 300 giây khi instance đang thức. Lệnh ghi `BAO_GIA` từ API Shop Xoài Non, đọc `NASTELEID`, rồi cập nhật `MENU` từ hai sheet đó. Không ghi dữ liệu sản phẩm vào `NASTELEID`. `DRY_RUN=true` vẫn giữ cho catalog; `ENABLE_SCHEDULED_MENU_LIVE=true` cho phép ghi file báo giá.
-2. GitHub Actions `.github/workflows/sync-menu.yml` cron `*/5 * * * *` chạy `python -m shop_integration sync-menu` với `DRY_RUN=false`. Đây là đồng hồ miễn phí khi Free instance ngủ sau 15 phút không có HTTP.
+- `ENABLE_SCHEDULED_SYNC=false`: Web Service không chạy thread MENU.
+- `ENABLE_SCHEDULED_MENU_LIVE=false`: mọi lần gọi `/sync-menu` chỉ dry-run.
+- `.github/workflows/sync-menu.yml` chỉ còn `workflow_dispatch` (chạy tay), `DRY_RUN=true`, không có cron.
+- Không dùng `setInterval` trình duyệt và không ping liên tục để giả Cron.
+- Chỉ sau khi Phase 4.3E migration được phê duyệt và backup Google đã verified mới xem xét bật lại lịch ghi.
 
-Cần secret `LAST_SPREADSHEET_ID` trên GitHub Actions. Không dùng `setInterval` trình duyệt. Không ping liên tục để giả Cron.
-
-Workflow `.github/workflows/sync-sources.yml` vẫn đọc nguồn mỗi ngày, DRY_RUN.
+Workflow `.github/workflows/sync-sources.yml` vẫn đọc nguồn mỗi ngày với `DRY_RUN=true`; đây là lịch chỉ đọc, không ghi Google.
 
 ## C2. Lịch đọc nguồn hàng ngày
 
 Không cần Render Cron. Workflow `.github/workflows/sync-sources.yml` chạy `17 1 * * *` UTC.
 
 1. Repo GitHub → **Settings → Secrets and variables → Actions**
-2. Thêm cùng các secret: `SHOP_XOAI_NON_API_KEY`, `NASTELE_API_KEY`, `GOOGLE_SPREADSHEET_ID`, `NASTELE_SPREADSHEET_ID`, `GOOGLE_DOCUMENT_ID`, `GOOGLE_CREDENTIALS_JSON`
+2. Thêm cùng các secret: `SHOP_XOAI_NON_API_KEY`, `NASTELE_API_KEY`, `GOOGLE_SPREADSHEET_ID`, `GOOGLE_DOCUMENT_ID`, `GOOGLE_CREDENTIALS_JSON`
 3. **Actions → sync-sources → Run workflow** để thử ngay
 
 ## D. Google

@@ -67,6 +67,14 @@ class GoogleWorkspaceError(IntegrationError):
     """Lỗi Google Sheets hoặc Google Docs."""
 
 
+class MenuLayoutError(ConfigError):
+    """Dữ liệu nguồn hoặc vùng ghi MENU không đúng layout đã khóa. Không ghi ô nào."""
+
+
+class SheetLayoutError(ConfigError):
+    """Header và dữ liệu của tab bảng khách lệch cột. Không đọc/ghi để tránh sai mapping."""
+
+
 class BackupError(IntegrationError):
     """Sao lưu thiếu, hỏng, hoặc chưa được kiểm tra toàn vẹn."""
 
@@ -77,3 +85,7 @@ class PartialSyncError(GoogleWorkspaceError):
 
 class TelegramDisabledError(IntegrationError):
     """Bộ điều hợp Telegram chưa được kích hoạt."""
+
+
+class CatalogValidationError(ConfigError):
+    """Catalog hai tầng hoặc mapping nguồn không hợp lệ. Không được đoán để ghi MENU."""

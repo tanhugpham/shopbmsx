@@ -29,8 +29,6 @@ def make_settings(**overrides: object) -> Settings:
         "enable_telegram": False,
         "request_timeout_seconds": 5.0,
         "nastele_api_key": SecretStr(""),
-        "nastele_spreadsheet_id": "",
-        "last_spreadsheet_id": "",
     }
     values.update(overrides)
     return Settings(**values, _env_file=None)

@@ -19,10 +19,9 @@ from shop_integration.backup_service import (
     restore_guide,
 )
 from shop_integration.combined_quote import render_quote_layout
-from shop_integration.config import Settings
+from shop_integration.config import SINGLE_SPREADSHEET_ENV, Settings
 from shop_integration.docs_service import DocsService, GoogleDocsGateway
 from shop_integration.errors import ApiError, BackupError, ConfigError, GoogleWorkspaceError, IntegrationError
-from shop_integration.google_auth import WORKSPACE_SCOPES, load_service_account_credentials
 from shop_integration.logging_utils import configure_logging
 from shop_integration.pricing import policy_from_settings, quote_cost
 from shop_integration.product_service import (
@@ -32,6 +31,7 @@ from shop_integration.product_service import (
     product_sync_status,
     selling_bounds,
 )
+from shop_integration.sheet_layout import LEGACY_TAB_NOTES
 from shop_integration.sheets_service import GoogleSheetsGateway, SheetsService
 from shop_integration.sync_service import SyncService
 from shop_integration.suppliers.nastele_sheet import NasteleSheetWriter
@@ -41,6 +41,7 @@ from shop_integration.suppliers.source_sync import (
     collect_suppliers,
 )
 from shop_integration.time_utils import format_timestamp, now_vietnam
+from shop_integration.workspace import open_workspace
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -102,6 +103,64 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync_menu.set_defaults(func=command_sync_menu)
 
+    menu_baseline = commands.add_parser(
+        "menu-baseline",
+        help="Chụp cấu trúc MENU (merge, công thức, dropdown, khổ cột/dòng). Chỉ đọc.",
+    )
+    menu_baseline.add_argument(
+        "--out",
+        default="",
+        help="File JSON baseline. Mặc định backups/menu-baseline-<thời gian>.json",
+    )
+    menu_baseline.add_argument(
+        "--compare",
+        default="",
+        help="So sánh với baseline đã lưu. Lệch thì trả mã 1 và không ghi.",
+    )
+    menu_baseline.set_defaults(func=command_menu_baseline)
+
+    menu_audit = commands.add_parser(
+        "menu-audit",
+        help="Đọc MENU và đối chiếu ProductID/VariantID, vùng mở rộng A:H. Chỉ đọc.",
+    )
+    menu_audit.add_argument(
+        "--json",
+        default="",
+        help="Ghi báo cáo JSON ra file local. Không ghi Google Sheets.",
+    )
+    menu_audit.set_defaults(func=command_menu_audit)
+
+    menu_migrate = commands.add_parser(
+        "menu-migrate",
+        help="Lập kế hoạch sửa BAO_GIA/BAO_GIA_TONG_HOP và MENU. Mặc định chỉ chạy thử.",
+    )
+    menu_migrate.add_argument(
+        "--json",
+        default="",
+        help="Ghi báo cáo migration JSON ra file local. Không ghi Google Sheets.",
+    )
+    menu_migrate.add_argument(
+        "--backup-dir",
+        default="",
+        help="Thư mục gốc chứa snapshot migration. Mặc định backups/.",
+    )
+    menu_migrate.add_argument(
+        "--baseline",
+        default="backups/menu-baseline-phase43b.json",
+        help="Baseline MENU chính thức để so sánh trước khi migration.",
+    )
+    menu_migrate.add_argument(
+        "--apply",
+        action="store_true",
+        help="Ghi Google sau khi backup READY. Bắt buộc đi cùng --confirm.",
+    )
+    menu_migrate.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Xác nhận ghi thật. Không có cờ này thì luôn dry-run.",
+    )
+    menu_migrate.set_defaults(func=command_menu_migrate)
+
     report = commands.add_parser("report", help="In báo cáo và ghi vào Google Doc khi không chạy thử")
     report.set_defaults(func=command_report)
 
@@ -126,10 +185,30 @@ def build_parser() -> argparse.ArgumentParser:
     restore.add_argument("--path", default="")
     restore.add_argument("--confirm", action="store_true")
     restore.set_defaults(func=command_restore)
+
+    config_check = commands.add_parser(
+        "config-check",
+        help="In cấu hình hiệu lực, biến cũ bị bỏ qua và tab LEGACY. Không gọi mạng.",
+    )
+    config_check.set_defaults(func=command_config_check)
     return parser
 
 
+def _enable_utf8_stdio() -> None:
+    """Console Windows cp1252 không in được tiếng Việt. Ép UTF-8 khi có thể."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            continue
+
+
 def main(argv: list[str] | None = None) -> int:
+    _enable_utf8_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -278,6 +357,34 @@ def command_quote(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def command_config_check(args: argparse.Namespace, settings: Settings) -> int:
+    del args
+    print(f"{SINGLE_SPREADSHEET_ENV}: {settings.spreadsheet_id or '(trống)'}")
+    print("GOOGLE_DOCUMENT_ID: " + ("có" if settings.google_document_id else "không"))
+    print(f"GOOGLE_CREDENTIALS_FILE: {settings.google_credentials_file}")
+    print(f"DRY_RUN: {str(settings.dry_run).lower()}")
+    print(
+        "ENABLE_PURCHASE: "
+        f"{str(settings.enable_purchase).lower()} "
+        f"(purchase_allowed={str(settings.purchase_allowed).lower()})"
+    )
+    print(
+        "ENABLE_TELEGRAM: "
+        f"{str(settings.enable_telegram).lower()} "
+        f"(telegram_active={str(settings.telegram_active).lower()})"
+    )
+    print(f"COMPARISON_QUANTITY: {settings.comparison_quantity}")
+    print(f"PREFERRED_SUPPLIER_ID: {settings.preferred_supplier_id}")
+    legacy = settings.legacy_spreadsheet_env()
+    print("Biến spreadsheet cũ bị bỏ qua: " + (", ".join(legacy) if legacy else "không"))
+    unused = settings.unused_env()
+    print("Biến đã đổi tên còn trong môi trường: " + (", ".join(unused) if unused else "không"))
+    print("Tab LEGACY: " + ", ".join(LEGACY_TAB_NOTES))
+    for warning in settings.config_warnings():
+        print(f"Cảnh báo: {warning}")
+    return 0
+
+
 def command_backup(args: argparse.Namespace, settings: Settings) -> int:
     del args
     service, sheets, docs = _backup_stack(settings)
@@ -321,7 +428,7 @@ def command_restore_plan(args: argparse.Namespace, settings: Settings) -> int:
     directory = Path(args.path) if args.path else latest_backup()
     service, sheets, docs = _backup_stack(settings)
     bundle = service.load(directory)
-    current_sheet = sheets.backup_snapshot(settings.google_spreadsheet_id)
+    current_sheet = sheets.backup_snapshot(settings.spreadsheet_id)
     current_doc = docs.backup_snapshot(settings.google_document_id)
     plan = plan_restore(bundle, current_sheet, str(current_doc.get("plain_text") or ""))
     _print_plan(plan)
@@ -332,7 +439,7 @@ def command_restore(args: argparse.Namespace, settings: Settings) -> int:
     directory = Path(args.path) if args.path else latest_backup()
     service, sheets, docs = _backup_stack(settings)
     bundle = service.load(directory)
-    current_sheet = sheets.backup_snapshot(settings.google_spreadsheet_id)
+    current_sheet = sheets.backup_snapshot(settings.spreadsheet_id)
     current_doc = docs.get_document(settings.google_document_id)
     if not args.confirm:
         plan = plan_restore(bundle, current_sheet, _doc_text(current_doc))
@@ -346,7 +453,7 @@ def command_restore(args: argparse.Namespace, settings: Settings) -> int:
         confirm=True,
         sheets_gateway=sheets,
         docs_gateway=docs,
-        spreadsheet_id=settings.google_spreadsheet_id,
+        spreadsheet_id=settings.spreadsheet_id,
         document_id=settings.google_document_id,
     )
     print("Đã ghi khôi phục trong phạm vi cho phép. Định dạng và tab người dùng không được phục hồi.")
@@ -372,6 +479,148 @@ def command_sync_menu(args: argparse.Namespace, settings: Settings) -> int:
     return 0 if result.status in {"ok", "locked", "partial"} else 1
 
 
+def command_menu_baseline(args: argparse.Namespace, settings: Settings) -> int:
+    """Chỉ đọc MENU. Không gọi API shop, không ghi Google Sheets."""
+
+    from shop_integration.combined_quote import MENU_HEADERS
+    from shop_integration.menu_layout import (
+        MENU_TAB,
+        load_menu_baseline,
+        menu_baseline_from_structure,
+        menu_structure_diff,
+        save_menu_baseline,
+    )
+
+    if not settings.spreadsheet_id:
+        raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
+    workspace = open_workspace(settings, sheets=True)
+    gateway = workspace.sheets
+    if gateway is None:
+        raise ConfigError("Thiếu kết nối Google Sheets.")
+    structure = gateway.get_sheet_structure(settings.spreadsheet_id, MENU_TAB)
+    captured_at = format_timestamp(now_vietnam())
+    baseline = menu_baseline_from_structure(
+        structure,
+        MENU_HEADERS,
+        captured_at=captured_at,
+    )
+    print(
+        f"MENU: {baseline.data_rows} dòng, {baseline.data_columns} cột, "
+        f"header dòng {baseline.header_row}."
+    )
+    print(
+        f"Layout: {baseline.merge_count} vùng gộp, {len(baseline.formulas)} công thức, "
+        f"{len(baseline.data_validations)} dropdown, "
+        f"{baseline.conditional_format_count} rule điều kiện."
+    )
+    print(
+        f"Khổ cột: {len(baseline.column_widths)} cột; "
+        f"chiều cao: {len(baseline.row_heights)} dòng; "
+        f"ô khóa (merge/công thức): {len(baseline.protected_cells)}."
+    )
+    print(f"Fingerprint: {baseline.fingerprint()}")
+    if args.compare:
+        saved = load_menu_baseline(args.compare)
+        differences = menu_structure_diff(saved, baseline)
+        if differences:
+            print(f"LỆCH baseline '{args.compare}' ({len(differences)} mục):")
+            for item in differences:
+                print(f"- {item}")
+            return 1
+        print(f"Khớp baseline '{args.compare}'.")
+        return 0
+    target = Path(args.out) if args.out else (
+        Path("backups") / f"menu-baseline-{now_vietnam().strftime('%Y%m%d-%H%M%S')}.json"
+    )
+    saved_to = save_menu_baseline(baseline, target)
+    print(f"Đã lưu baseline: {saved_to}")
+    return 0
+
+
+def command_menu_audit(args: argparse.Namespace, settings: Settings) -> int:
+    """Chỉ đọc MENU + API shop. Không ghi Google Sheets, không tạo đơn."""
+
+    import json
+
+    from shop_integration.combined_quote import MENU_HEADERS, shop_quote_rows
+    from shop_integration.menu_audit import read_menu_audit
+    from shop_integration.menu_sync import _load_shop_products
+    from shop_integration.pricing import policy_from_settings
+
+    if not settings.spreadsheet_id:
+        raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
+    workspace = open_workspace(settings, sheets=True)
+    gateway = workspace.sheets
+    if gateway is None:
+        raise ConfigError("Thiếu kết nối Google Sheets.")
+    products, notes = _load_shop_products(settings, None)
+    source_rows = shop_quote_rows(products, policy_from_settings(settings))
+    report = read_menu_audit(
+        gateway,
+        settings.spreadsheet_id,
+        MENU_HEADERS,
+        source_rows,
+    )
+    print(report.text())
+    for note in notes:
+        print(note)
+    if args.json:
+        target = Path(args.json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(report.as_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Đã lưu báo cáo audit: {target}")
+    return 0
+
+
+def command_menu_migrate(args: argparse.Namespace, settings: Settings) -> int:
+    """Lập kế hoạch sửa nguồn + MENU. DRY_RUN=true thì không ghi Google."""
+
+    import json
+
+    from shop_integration.combined_quote import shop_quote_rows
+    from shop_integration.menu_migration import run_migration
+    from shop_integration.menu_sync import _load_shop_products
+    from shop_integration.pricing import policy_from_settings
+
+    if not settings.spreadsheet_id:
+        raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
+    workspace = open_workspace(settings, sheets=True)
+    gateway = workspace.sheets
+    if gateway is None:
+        raise ConfigError("Thiếu kết nối Google Sheets.")
+    if args.apply and not args.confirm:
+        raise ConfigError("--apply phải đi cùng --confirm. Không ghi Google.")
+    products, notes = _load_shop_products(settings, None)
+    shop_rows = shop_quote_rows(products, policy_from_settings(settings))
+    live = bool(args.apply and args.confirm and not settings.dry_run)
+    if args.apply and settings.dry_run:
+        print("DRY_RUN=true: bỏ qua --apply, chỉ chạy thử.")
+    result = run_migration(
+        gateway,
+        settings.spreadsheet_id,
+        shop_rows,
+        live=live,
+        backup_root=args.backup_dir or None,
+        baseline_path=args.baseline,
+        secrets=settings.secret_values(),
+    )
+    print(result.text())
+    for note in notes:
+        print(note)
+    if args.json:
+        target = Path(args.json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(result.as_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Đã lưu báo cáo migration: {target}")
+    return 0 if result.status in {"PLANNED", "UP_TO_DATE", "APPLIED"} else 1
+
+
 def _source_command(settings: Settings, *, write_sheets: bool) -> int:
     stamp = format_timestamp(now_vietnam())
     shop, nastele = collect_suppliers(settings, stamp)
@@ -382,33 +631,34 @@ def _source_command(settings: Settings, *, write_sheets: bool) -> int:
     approval_warnings: list[str] = []
     backup = None
     if write_sheets and not settings.dry_run:
-        if not settings.google_spreadsheet_id or not settings.google_document_id:
+        if not settings.spreadsheet_id or not settings.google_document_id:
             raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID hoặc GOOGLE_DOCUMENT_ID.")
         if not settings.google_credentials_file:
             raise ConfigError("Thiếu GOOGLE_CREDENTIALS_FILE.")
-    if settings.google_spreadsheet_id and settings.google_credentials_file:
+    if settings.spreadsheet_id and settings.google_credentials_file:
         try:
-            credentials = load_service_account_credentials(
-                settings.google_credentials_file,
-                WORKSPACE_SCOPES,
-            )
-            gateway = GoogleSheetsGateway(credentials)
+            write_live = write_sheets and not settings.dry_run
+            workspace = open_workspace(settings, sheets=True, docs=write_live)
+            gateway = workspace.sheets
+            if gateway is None:
+                raise ConfigError("Thiếu kết nối Google Sheets.")
             writer = SourceSheetWriter(
                 gateway,
-                settings.google_spreadsheet_id,
+                settings.spreadsheet_id,
                 dry_run=settings.dry_run or not write_sheets,
                 secrets=settings.secret_values(),
             )
             approvals, approval_warnings = writer.read_approvals()
-            if settings.nastele_spreadsheet_id.strip():
-                nastele_writer = NasteleSheetWriter(
-                    gateway,
-                    settings.nastele_spreadsheet_id,
-                    dry_run=settings.dry_run or not write_sheets,
-                    secrets=settings.secret_values(),
-                )
-            if write_sheets and not settings.dry_run:
-                docs_gateway = GoogleDocsGateway(credentials)
+            nastele_writer = NasteleSheetWriter(
+                gateway,
+                settings.spreadsheet_id,
+                dry_run=settings.dry_run or not write_sheets,
+                secrets=settings.secret_values(),
+            )
+            if write_live:
+                docs_gateway = workspace.docs
+                if docs_gateway is None:
+                    raise ConfigError("Thiếu kết nối Google Docs.")
                 docs_service = DocsService(
                     docs_gateway,
                     settings.google_document_id,
@@ -418,7 +668,7 @@ def _source_command(settings: Settings, *, write_sheets: bool) -> int:
                 backup = BackupService(
                     gateway,
                     docs_gateway,
-                    settings.google_spreadsheet_id,
+                    settings.spreadsheet_id,
                     settings.google_document_id,
                     secrets=settings.secret_values(),
                 )
@@ -465,33 +715,31 @@ def command_report(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def _execute(settings: Settings, *, write_sheets: bool, write_doc: bool) -> object:
-    needs_google = (write_sheets and settings.google_spreadsheet_id and not settings.dry_run) or (
+    needs_google = (write_sheets and settings.spreadsheet_id and not settings.dry_run) or (
         write_doc and settings.google_document_id and not settings.dry_run
     )
-    if write_sheets and not settings.dry_run and not settings.google_spreadsheet_id:
+    if write_sheets and not settings.dry_run and not settings.spreadsheet_id:
         raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
     if write_doc and not settings.dry_run and not settings.google_document_id:
         raise ConfigError("Thiếu GOOGLE_DOCUMENT_ID.")
     if needs_google and not settings.google_credentials_file:
         raise ConfigError("Thiếu GOOGLE_CREDENTIALS_FILE.")
 
-    credentials = None
-    want_sheets = bool(settings.google_spreadsheet_id and settings.google_credentials_file)
+    want_sheets = bool(settings.spreadsheet_id and settings.google_credentials_file)
     want_docs = bool(settings.google_document_id and settings.google_credentials_file)
-    if want_sheets or want_docs:
-        credentials = load_service_account_credentials(
-            settings.google_credentials_file,
-            WORKSPACE_SCOPES,
-        )
     secret = settings.shop_xoai_non_api_key.get_secret_value()
-    sheets_gateway = GoogleSheetsGateway(credentials) if credentials is not None else None
-    docs_gateway = GoogleDocsGateway(credentials) if credentials is not None else None
+    sheets_gateway = None
+    docs_gateway = None
+    if want_sheets or want_docs:
+        workspace = open_workspace(settings, sheets=want_sheets, docs=want_docs)
+        sheets_gateway = workspace.sheets
+        docs_gateway = workspace.docs
     sheets = None
     docs = None
     if want_sheets and sheets_gateway is not None:
         sheets = SheetsService(
             sheets_gateway,
-            settings.google_spreadsheet_id,
+            settings.spreadsheet_id,
             dry_run=settings.dry_run,
             secret=secret,
         )
@@ -509,7 +757,7 @@ def _execute(settings: Settings, *, write_sheets: bool, write_doc: bool) -> obje
         backup = BackupService(
             sheets_gateway,
             docs_gateway,
-            settings.google_spreadsheet_id,
+            settings.spreadsheet_id,
             settings.google_document_id,
             secrets=settings.secret_values(),
         )
@@ -532,17 +780,19 @@ class _OfflineSource:
 
 
 def _backup_stack(settings: Settings) -> tuple[BackupService, GoogleSheetsGateway, GoogleDocsGateway]:
-    if not settings.google_spreadsheet_id or not settings.google_document_id:
+    if not settings.spreadsheet_id or not settings.google_document_id:
         raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID hoặc GOOGLE_DOCUMENT_ID.")
     if not settings.google_credentials_file:
         raise ConfigError("Thiếu GOOGLE_CREDENTIALS_FILE.")
-    credentials = load_service_account_credentials(settings.google_credentials_file, WORKSPACE_SCOPES)
-    sheets = GoogleSheetsGateway(credentials)
-    docs = GoogleDocsGateway(credentials)
+    workspace = open_workspace(settings, sheets=True, docs=True)
+    sheets = workspace.sheets
+    docs = workspace.docs
+    if sheets is None or docs is None:
+        raise ConfigError("Thiếu kết nối Google Sheets hoặc Google Docs.")
     service = BackupService(
         sheets,
         docs,
-        settings.google_spreadsheet_id,
+        settings.spreadsheet_id,
         settings.google_document_id,
         secrets=settings.secret_values(),
     )

@@ -36,7 +36,6 @@ jobs:
           SHOP_XOAI_NON_API_KEY: ${{ secrets.SHOP_XOAI_NON_API_KEY }}
           NASTELE_API_KEY: ${{ secrets.NASTELE_API_KEY }}
           GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
-          NASTELE_SPREADSHEET_ID: ${{ secrets.NASTELE_SPREADSHEET_ID }}
           GOOGLE_DOCUMENT_ID: ${{ secrets.GOOGLE_DOCUMENT_ID }}
           GOOGLE_CREDENTIALS_FILE: ./GOOGLE_CREDENTIALS_FILE.json
         run: python -m shop_integration sync-sources

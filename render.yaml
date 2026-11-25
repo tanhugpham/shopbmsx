@@ -18,10 +18,11 @@ services:
         value: "3.13.7"
       - key: DRY_RUN
         value: "true"
+      # Không bật bất kỳ scheduler nào trong giai đoạn Phase 4.3F.
       - key: ENABLE_SCHEDULED_SYNC
-        value: "true"
+        value: "false"
       - key: ENABLE_SCHEDULED_MENU_LIVE
-        value: "true"
+        value: "false"
       - key: SCHEDULED_SYNC_SECONDS
         value: "300"
       - key: ENABLE_PURCHASE
@@ -39,10 +40,6 @@ services:
       - key: NASTELE_API_KEY
         sync: false
       - key: GOOGLE_SPREADSHEET_ID
-        sync: false
-      - key: NASTELE_SPREADSHEET_ID
-        sync: false
-      - key: LAST_SPREADSHEET_ID
         sync: false
       - key: GOOGLE_DOCUMENT_ID
         sync: false

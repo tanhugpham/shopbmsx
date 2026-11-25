@@ -7,7 +7,9 @@ from typing import Any, Protocol
 from shop_integration.errors import ConfigError, GoogleWorkspaceError, PartialSyncError
 from shop_integration.google_auth import call_google
 from shop_integration.logging_utils import redact
+from shop_integration.menu_layout import normalize_protected_ranges
 from shop_integration.product_service import CUSTOMER_PRICE_HEADERS
+from shop_integration.sheet_io import column_letter, ensure_tabs, read_table
 from shop_integration.sheet_layout import (
     ALL_TABS,
     PRICE_HISTORY_HEADERS,
@@ -81,7 +83,8 @@ class GoogleSheetsGateway:
                     "sheets.properties(sheetId,title),"
                     "sheets.bandedRanges(bandedRangeId),"
                     "sheets.conditionalFormats,"
-                    "sheets.merges"
+                    "sheets.merges,"
+                    "sheets.protectedRanges"
                 ),
             )
             .execute(),
@@ -113,9 +116,122 @@ class GoogleSheetsGateway:
                     "bandingIds": banding_ids,
                     "conditionalFormatCount": len(rules) if isinstance(rules, list) else 0,
                     "merges": merges,
+                    "protectedRanges": normalize_protected_ranges(
+                        sheet.get("protectedRanges") or []
+                    ),
                 }
             )
         return found
+
+    def get_sheet_structure(
+        self,
+        spreadsheet_id: str,
+        title: str,
+        *,
+        max_rows: int = 200,
+        last_column: str = "M",
+    ) -> dict[str, Any]:
+        """Cấu trúc một tab: merge, công thức, dropdown, khổ cột/dòng. Chỉ đọc."""
+
+        escaped = str(title).replace("'", "''")
+        result = call_google(
+            lambda: self._service.spreadsheets()
+            .get(
+                spreadsheetId=spreadsheet_id,
+                ranges=[f"'{escaped}'!A1:{last_column}{max_rows}"],
+                includeGridData=True,
+                fields=(
+                    "sheets.properties(sheetId,title,gridProperties),"
+                    "sheets.merges,"
+                    "sheets.protectedRanges,"
+                    "sheets.conditionalFormats,"
+                    "sheets.data.rowMetadata(pixelSize),"
+                    "sheets.data.columnMetadata(pixelSize),"
+                    "sheets.data.rowData.values(formattedValue,userEnteredValue,dataValidation)"
+                ),
+            )
+            .execute(),
+            retry=True,
+        )
+        sheets = result.get("sheets", []) if isinstance(result, dict) else []
+        sheet = next(
+            (
+                item
+                for item in sheets
+                if isinstance(item, dict)
+                and isinstance(item.get("properties"), dict)
+                and item["properties"].get("title") == title
+            ),
+            None,
+        )
+        if sheet is None:
+            raise GoogleWorkspaceError(f"Không thấy tab '{title}' để đọc cấu trúc.")
+        properties = sheet.get("properties", {})
+        grid = (sheet.get("data") or [{}])[0] if sheet.get("data") else {}
+        row_data = grid.get("rowData") or []
+        column_metadata = grid.get("columnMetadata") or []
+        values: list[list[Any]] = []
+        formulas: list[dict[str, str]] = []
+        validations: list[dict[str, Any]] = []
+        row_heights: dict[str, int] = {}
+        for row_index, row in enumerate(row_data):
+            if not isinstance(row, dict):
+                continue
+            meta = row.get("rowMetadata") or {}
+            height = meta.get("pixelSize") if isinstance(meta, dict) else None
+            if isinstance(height, int):
+                row_heights[str(row_index + 1)] = height
+            line: list[str] = []
+            for column_index, cell in enumerate(row.get("values") or []):
+                if not isinstance(cell, dict):
+                    line.append("")
+                    continue
+                line.append(str(cell.get("formattedValue") or ""))
+                entered = cell.get("userEnteredValue") or {}
+                formula = entered.get("formulaValue") if isinstance(entered, dict) else None
+                reference = f"{column_letter(column_index)}{row_index + 1}"
+                if isinstance(formula, str) and formula:
+                    formulas.append({"cell": reference, "formula": formula})
+                validation = cell.get("dataValidation")
+                if isinstance(validation, dict):
+                    condition = validation.get("condition") or {}
+                    validations.append(
+                        {
+                            "cell": reference,
+                            "type": str(condition.get("type") or "")
+                            if isinstance(condition, dict)
+                            else "",
+                            "values": list(condition.get("values") or [])
+                            if isinstance(condition, dict)
+                            else [],
+                        }
+                    )
+            values.append(line)
+        while values and all(not str(cell).strip() for cell in values[-1]):
+            values.pop()
+        widths: dict[str, int] = {}
+        for column_index, meta in enumerate(column_metadata):
+            size = meta.get("pixelSize") if isinstance(meta, dict) else None
+            if isinstance(size, int):
+                widths[column_letter(column_index)] = size
+        rules = sheet.get("conditionalFormats") or []
+        return {
+            "title": title,
+            "sheet_id": properties.get("sheetId"),
+            "grid_properties": dict(properties.get("gridProperties") or {}),
+            "conditional_format_count": len(rules) if isinstance(rules, list) else 0,
+            "merges": [
+                merge for merge in (sheet.get("merges") or []) if isinstance(merge, dict)
+            ],
+            "protected_ranges": normalize_protected_ranges(
+                sheet.get("protectedRanges") or []
+            ),
+            "values": values,
+            "formulas": formulas,
+            "data_validations": validations,
+            "column_widths": widths,
+            "row_heights": row_heights,
+        }
 
     def batch_update(self, spreadsheet_id: str, requests: list[dict[str, Any]]) -> None:
         if not requests:
@@ -282,11 +398,7 @@ class SheetsService:
         self.tabs_to_create: list[str] = []
 
     def read_records(self, tab: str) -> SheetTable:
-        titles = self.gateway.list_sheet_titles(self.spreadsheet_id)
-        if tab not in titles:
-            return SheetTable()
-        grid = self.gateway.get_values(self.spreadsheet_id, f"'{tab}'!A:ZZ")
-        return records_from_grid(grid)
+        return read_table(self.gateway, self.spreadsheet_id, tab)
 
     def apply_catalog(
         self,
@@ -367,17 +479,17 @@ class SheetsService:
             )
 
     def _ensure_tabs(self) -> None:
-        titles = set(self.gateway.list_sheet_titles(self.spreadsheet_id))
         for title in ALL_TABS:
             self._assert_managed_tab(title)
-            if title in titles:
-                continue
-            if self.dry_run:
-                if title not in self.tabs_to_create:
-                    self.tabs_to_create.append(title)
-                continue
-            self.gateway.add_sheet(self.spreadsheet_id, title)
-            titles.add(title)
+        missing = ensure_tabs(
+            self.gateway,
+            self.spreadsheet_id,
+            ALL_TABS,
+            dry_run=self.dry_run,
+        )
+        for title in missing:
+            if title not in self.tabs_to_create:
+                self.tabs_to_create.append(title)
 
     def _assert_managed_tab(self, tab: str) -> None:
         if tab == "Trang tính1" or tab not in ALL_TABS:

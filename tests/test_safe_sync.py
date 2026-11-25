@@ -143,13 +143,17 @@ def test_live_shape_sync_is_idempotent_and_detects_price_change() -> None:
     assert first.summary.variant_count == 24
     assert first.sheets_written is True
     assert first.doc_written is True
-    assert len(sheets.batches) == 1
+    # Phase 4.3B: catalog, nguồn, NASTELEID và báo giá cùng một spreadsheet.
+    assert len(sheets.batches) == 4
     assert [item[0] for item in sheets.batches[0]] == [
         "'SAN_PHAM'!A1",
         "'BIEN_THE'!A1",
         "'BANG_GIA_BAN'!A1",
         "'CAU_HINH'!A1",
     ]
+    assert [item[0] for item in sheets.batches[1]] == ["'NASTELEID'!A1"]
+    assert [item[0] for item in sheets.batches[2]] == ["'BAO_GIA'!A1"]
+    assert [item[0] for item in sheets.batches[3]] == ["'BAO_GIA_TONG_HOP'!A1"]
     assert sheets.values["Trang tính1"] == [["Giữ nguyên"], ["số liệu người dùng"]]
     assert "Trang tính1" not in sheets.writes
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from threading import Thread
 
 import httpx
@@ -35,6 +36,19 @@ def test_health_is_public_and_read_only() -> None:
     assert payload["enable_purchase"] is False
     assert root.json()["status"] == "ok"
     assert "sxn_live_" not in response.text
+
+
+def test_runtime_guards_disable_scheduled_writes(monkeypatch) -> None:
+    monkeypatch.setenv("ENABLE_SCHEDULED_SYNC", "true")
+    monkeypatch.setenv("ENABLE_SCHEDULED_MENU_LIVE", "true")
+
+    apply_runtime_guards()
+
+    assert os.environ["DRY_RUN"] == "true"
+    assert os.environ["ENABLE_PURCHASE"] == "false"
+    assert os.environ["ENABLE_TELEGRAM"] == "false"
+    assert os.environ["ENABLE_SCHEDULED_SYNC"] == "false"
+    assert os.environ["ENABLE_SCHEDULED_MENU_LIVE"] == "false"
 
 
 def test_sync_without_token_is_forbidden(monkeypatch) -> None:

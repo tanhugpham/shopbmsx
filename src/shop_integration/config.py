@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from decimal import Decimal
@@ -16,6 +17,45 @@ from pydantic_settings.sources import PydanticBaseSettingsSource
 # parents[0] là package, parents[1] là src, parents[2] là thư mục gốc dự án.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GOOGLE_CREDENTIALS_FILE = "./GOOGLE_CREDENTIALS_FILE.json"
+
+# Phase 4.3B: một spreadsheet duy nhất cho Shop Xoài Non, Nastele, MENU và báo giá.
+SINGLE_SPREADSHEET_ENV = "GOOGLE_SPREADSHEET_ID"
+# Hai biến cũ không còn được đọc. Vẫn phát hiện để cảnh báo, không dùng làm đích ghi.
+LEGACY_SPREADSHEET_ENV = ("NASTELE_SPREADSHEET_ID", "LAST_SPREADSHEET_ID")
+# Tên biến đã đổi hoặc đã bỏ. Chỉ dùng để báo cho người vận hành, không đọc giá trị.
+OBSOLETE_ENV = ("DEFAULT_PURCHASE_QUANTITY", "PREFERRED_SUPPLIER_ON_TIE")
+
+
+def _present_env(names: tuple[str, ...]) -> list[str]:
+    """Tên các biến đang có giá trị, đọc .env một lần. Không trả giá trị."""
+
+    dotenv = _dotenv_assignments()
+    present: list[str] = []
+    for name in names:
+        direct = os.environ.get(name, "")
+        if direct.strip() or dotenv.get(name.upper(), "").strip():
+            present.append(name)
+    return present
+
+
+def _dotenv_assignments() -> dict[str, str]:
+    """Chỉ đọc khóa và giá trị của .env để phát hiện biến cũ. Không ghi nhật ký."""
+
+    try:
+        text = (PROJECT_ROOT / ".env").read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return {}
+    found: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export ") :].strip()
+        found[key.upper()] = value.strip().strip('"').strip("'")
+    return found
 
 
 def resolve_project_path(value: str) -> Path:
@@ -61,8 +101,6 @@ class Settings(BaseSettings):
     preferred_supplier_id: str = "shop_xoai_non"
     comparison_quantity: int = 1
     nastele_rate_limit_per_minute: int = 60
-    nastele_spreadsheet_id: str = ""
-    last_spreadsheet_id: str = ""
 
     @classmethod
     def settings_customise_sources(
@@ -168,14 +206,9 @@ class Settings(BaseSettings):
             raise ValueError("COMPARISON_QUANTITY phải là số nguyên lớn hơn hoặc bằng 1.")
         return value
 
-    @field_validator("nastele_spreadsheet_id")
+    @field_validator("google_spreadsheet_id", "google_document_id")
     @classmethod
-    def strip_nastele_spreadsheet_id(cls, value: str) -> str:
-        return str(value or "").strip()
-
-    @field_validator("last_spreadsheet_id")
-    @classmethod
-    def strip_last_spreadsheet_id(cls, value: str) -> str:
+    def strip_google_ids(cls, value: object) -> str:
         return str(value or "").strip()
 
     @field_validator("nastele_rate_limit_per_minute")
@@ -192,3 +225,35 @@ class Settings(BaseSettings):
             if len(raw) >= 8 and raw not in found:
                 found.append(raw)
         return found
+
+    @property
+    def spreadsheet_id(self) -> str:
+        """Đích ghi duy nhất cho Shop Xoài Non, Nastele, MENU và báo giá."""
+
+        return self.google_spreadsheet_id.strip()
+
+    def legacy_spreadsheet_env(self) -> list[str]:
+        """Biến spreadsheet cũ còn đặt trong môi trường hoặc .env. Không đọc làm đích ghi."""
+
+        return _present_env(LEGACY_SPREADSHEET_ENV)
+
+    def unused_env(self) -> list[str]:
+        """Biến đã đổi tên hoặc đã bỏ nhưng còn trong môi trường. Không ảnh hưởng cấu hình."""
+
+        return _present_env(OBSOLETE_ENV)
+
+    def config_warnings(self) -> list[str]:
+        warnings: list[str] = []
+        for name in self.legacy_spreadsheet_env():
+            warnings.append(f"Bỏ qua {name}. Chỉ dùng {SINGLE_SPREADSHEET_ENV}.")
+        for name in self.unused_env():
+            warnings.append(
+                f"Bỏ qua {name}. Dùng COMPARISON_QUANTITY hoặc PREFERRED_SUPPLIER_ID."
+            )
+        if not self.purchase_allowed:
+            warnings.append("ENABLE_PURCHASE không mở đường tạo đơn.")
+        if not self.telegram_active:
+            warnings.append("ENABLE_TELEGRAM không kích hoạt Telegram.")
+        if not self.dry_run:
+            warnings.append("DRY_RUN=false. Chỉ ghi khi backup đã verified.")
+        return warnings

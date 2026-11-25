@@ -305,7 +305,7 @@ class SyncService:
         write_sheets: bool,
         write_doc: bool,
     ) -> str:
-        spreadsheet_id = self._settings.last_spreadsheet_id.strip()
+        spreadsheet_id = self._settings.spreadsheet_id
         if not spreadsheet_id or not (write_sheets or write_doc):
             return ""
         gateway = self._quote_gateway

@@ -34,7 +34,7 @@ Copy-Item .env.example .env
 | --- | --- |
 | `SHOP_XOAI_NON_BASE_URL` | Mặc định `https://shopxoainon.online/api/v1`. Phải dùng HTTPS. |
 | `SHOP_XOAI_NON_API_KEY` | API key dạng `sxn_live_...`, gửi trong header `x-api-key`. |
-| `GOOGLE_SPREADSHEET_ID` | ID của spreadsheet có sẵn, lấy trên URL Google Sheets. |
+| `GOOGLE_SPREADSHEET_ID` | ID của spreadsheet duy nhất (catalog, nguồn, MENU, báo giá), lấy trên URL Google Sheets. |
 | `GOOGLE_DOCUMENT_ID` | ID của document có sẵn. |
 | `GOOGLE_CREDENTIALS_FILE` | Mặc định `./GOOGLE_CREDENTIALS_FILE.json`. Đường dẫn tương đối tính từ thư mục gốc dự án. Đường dẫn tuyệt đối vẫn dùng được. |
 | `APP_ENV` | `development` hoặc tên môi trường khác. |
@@ -136,7 +136,7 @@ Với `DRY_RUN=true`, lệnh chỉ in đối chiếu. Khi `DRY_RUN=false`, lện
 - `BANG_GIA_TOI_UU`: bảng giá cho khách. Không có giá vốn, lợi nhuận hay API key.
 - `CAN_GHEP_SAN_PHAM`: cặp cần đối chiếu. Điền `Review Status` là `EXACT_MATCH` hoặc `DIFFERENT_PRODUCT`, và có thể điền `Approved Canonical Product ID`. Lần sau không ghi đè hai ô này.
 
-Spreadsheet riêng của Nastele dùng `NASTELE_SPREADSHEET_ID`. Để trống thì trạng thái là BLOCKED. Không tự tạo file Google. Khi đã có ID và quyền Sửa, dữ liệu Nastele vào `NASTELE_SAN_PHAM`, `NASTELE_GIA_SI`, `NASTELE_LICH_SU_GIA`, `NASTELE_NHAT_KY` và `NASTELE_CAU_HINH`.
+Tab Nastele dùng chung spreadsheet `GOOGLE_SPREADSHEET_ID`. Thiếu ID hoặc chưa có quyền Sửa thì trạng thái là BLOCKED. Không tự tạo file Google. Khi đã có quyền, dữ liệu Nastele vào `NASTELE_SAN_PHAM`, `NASTELE_GIA_SI`, `NASTELE_LICH_SU_GIA`, `NASTELE_NHAT_KY` và `NASTELE_CAU_HINH` trong cùng file.
 
 Chỉ cặp `EXACT_MATCH` mới được so giá. Giá sỉ Nastele chỉ dùng khi `minQuantity` nhỏ hơn hoặc bằng `COMPARISON_QUANTITY`. Nguồn rẻ hơn nhưng hết hàng không được chọn. Dữ liệu cũ hoặc thiếu được đánh `CẦN XÁC MINH` và không bị ghi tồn kho 0.
 
@@ -160,14 +160,15 @@ PRICING_MIDDLE_PROFIT=35000
 
 Báo cáo Google Docs nằm trong một vùng có dấu `SHOP_XOAI_NON_BAO_CAO_BEGIN` và `SHOP_XOAI_NON_BAO_CAO_END`. Lần chạy sau thay vùng đó. Nội dung ngoài hai dấu không bị ghi đè. Nếu chỉ thấy một dấu, lệnh dừng và không sửa document.
 
-## 7. File báo giá tổng hợp
+## 7. Một file Google cho catalog và báo giá
 
-Hai file Google tách nhau. Không copy dòng từ file catalog sang file tổng hợp.
+Phase 4.3B dùng **một** spreadsheet `GOOGLE_SPREADSHEET_ID` cho catalog, nguồn, MENU và báo giá. Không copy dòng từ tab catalog sang tab khách.
 
-| File | Biến | Tab bạn xem / sửa |
+| Khu vực | Biến | Tab bạn xem / sửa |
 | --- | --- | --- |
 | Catalog Shop Xoài Non | `GOOGLE_SPREADSHEET_ID` | `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`. Nội bộ, có giá gốc. |
-| Báo giá tổng hợp | `LAST_SPREADSHEET_ID` | `NASTELEID` (sửa tay), `BAO_GIA` (tool, từ API), `MENU` (ghép hai tab trên), `BAO_GIA_TONG_HOP` (tool). |
+| Nguồn và ghép sản phẩm | `GOOGLE_SPREADSHEET_ID` | `SO_SANH_NGUON`, `BANG_GIA_TOI_UU`, `CAN_GHEP_SAN_PHAM`. |
+| Báo giá chính thức | `GOOGLE_SPREADSHEET_ID` | `NASTELEID` (sửa tay), `BAO_GIA` (tool, từ API), `MENU` (ghép hai tab trên), `BAO_GIA_TONG_HOP` (tool). |
 
 `NASTELEID` và `BAO_GIA` khóa **cùng một dòng tiêu đề** với các cột sản phẩm của `MENU`. `ID` là số thứ tự, không lấy `local_id` API. `MENU` thêm cột `STATUS`.
 

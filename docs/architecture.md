@@ -194,7 +194,7 @@ Logger `httpx`, `httpcore` và `googleapiclient` bị đặt mức WARNING để
 
 ## Báo giá tổng hợp — UI thống nhất
 
-File `LAST_SPREADSHEET_ID` tách khỏi catalog `GOOGLE_SPREADSHEET_ID`. `NASTELEID` và `BAO_GIA` khóa cùng cột với phần sản phẩm của `MENU`: `ID`, `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK`. `ID` là số thứ tự trên từng sheet, không lấy local id API. `MENU` thêm cột `STATUS`.
+Phase 4.3B: chỉ một file `GOOGLE_SPREADSHEET_ID` cho cả catalog, nguồn, MENU và báo giá. `NASTELEID` và `BAO_GIA` khóa cùng cột với phần sản phẩm của `MENU`: `ID`, `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK`. `ID` là số thứ tự trên từng sheet, không lấy local id API. `MENU` thêm cột `STATUS`.
 
 `NASTELEID` do người dùng nhập. Tool chỉ tạo/khóa dòng tiêu đề và định dạng, không ghi dữ liệu sản phẩm và không đổ catalog API vào tab này. Cột giá vốn không map sang `PRICE`.
 
@@ -238,8 +238,21 @@ Backup trong `backups/` là snapshot local, không đủ cho scheduled live sync
 
 `BANG_GIA_TOI_UU` và vùng Docs `BANG_GIA_KHACH_BEGIN` / `BANG_GIA_KHACH_END` chỉ hiện số thứ tự, tên, mô tả, giá bán, tình trạng và thời điểm. Không hiện giá vốn, lợi nhuận, mã sản phẩm hay API key. Vùng `SHOP_XOAI_NON_BAO_CAO` là báo giá cho khách: STT, tên, giá bán, tình trạng. Không có cột Product ID và không có giá gốc. Mã sản phẩm vẫn nằm trong Sheets để đồng bộ.
 
-Spreadsheet Nastele dùng `NASTELE_SPREADSHEET_ID`. Khi biến này trống, trạng thái là BLOCKED và không tạo file mới. Tab `NASTELE_SAN_PHAM`, `NASTELE_GIA_SI`, `NASTELE_LICH_SU_GIA`, `NASTELE_NHAT_KY`, `NASTELE_CAU_HINH` chỉ được ghi sau khi đã đọc snapshot cục bộ. API key không được ghi vào ô. Lần đọc Nastele lỗi thì giữ dòng cũ và chỉ thêm cảnh báo vào nhật ký.
+Tab Nastele dùng chính spreadsheet `GOOGLE_SPREADSHEET_ID`. Thiếu biến này hoặc thiếu quyền Sửa thì trạng thái là BLOCKED và không tạo file mới. Tab `NASTELE_SAN_PHAM`, `NASTELE_GIA_SI`, `NASTELE_LICH_SU_GIA`, `NASTELE_NHAT_KY`, `NASTELE_CAU_HINH` chỉ được ghi sau khi đã đọc snapshot cục bộ. API key không được ghi vào ô. Lần đọc Nastele lỗi thì giữ dòng cũ và chỉ thêm cảnh báo vào nhật ký.
 
 Tab `SO_SANH_NGUON`, `BANG_GIA_TOI_UU` và `CAN_GHEP_SAN_PHAM` cũng nằm ngoài `ALL_TABS`. `sync` cũ không tạo và không ghi các tab này. `sync-sources` khi không dry-run phải có backup trước. Workflow `.github/workflows/sync-sources.yml` đặt `DRY_RUN=true` và `ENABLE_PURCHASE=false`. Chưa đẩy GitHub.
 
 Giá không hợp lệ vẫn không bị đổi thành 0.
+
+## Phase 4.3F — catalog hai tầng cho nhiều nhà cung cấp
+
+Package `catalog/` bổ sung lớp bán độc lập với API:
+
+- `SupplierProduct`: dữ liệu nguồn đã chuẩn hóa, có ProductID/VariantID nếu API cung cấp, hoặc `source_key` do adapter/người vận hành kiểm soát.
+- `StoreProduct`: sản phẩm bán cho khách, dùng `store_product_id`/`menu_code`; không chứa ID nguồn trong dữ liệu khách.
+- `SupplierMapping`: mapping nội bộ, bắt buộc ID nguồn hoặc `source_key`, phải được duyệt; tên sản phẩm không phải khóa.
+- `ContentOverride`: khóa tên/mô tả/thời hạn/nội dung bán hàng/contact; API không ghi đè trường đã khóa. Bảo hành do nguồn quyết định.
+- `CatalogSyncService`: fetch nhiều adapter, đối chiếu, áp override, tính giá, cập nhật tồn kho và chiếu MENU.
+- `menu_projection`: chỉ xuất đúng 8 cột MENU hiện tại, chặn ID nội bộ/giá vốn/mapping.
+
+Phase này chỉ chạy local/read-only. `menu_sync`, migration 8 thao tác Phase 4.3E và layout MENU chưa bị thay đổi. Chi tiết và lộ trình: [phase43f_multi_supplier.md](phase43f_multi_supplier.md).

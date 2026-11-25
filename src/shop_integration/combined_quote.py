@@ -14,7 +14,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from shop_integration.errors import ConfigError
+from shop_integration.errors import ConfigError, MenuLayoutError, SheetLayoutError
+from shop_integration.menu_layout import (
+    MenuCapacity,
+    MenuLayoutGuard,
+    assert_menu_rows_valid,
+    menu_guard_from_sheet_meta,
+    read_menu_baseline,
+)
 from shop_integration.models import Product
 from shop_integration.pricing import PricingPolicy, quote_cost, round_pretty_vnd
 from shop_integration.product_service import MISSING_TEXT, variant_stock_label
@@ -257,6 +264,8 @@ def shop_quote_rows(
                     round_pretty_vnd(quote.selling),
                     variant_stock_label(variant),
                     quantity,
+                    product_id=product.id,
+                    variant_id=variant.id,
                 )
             )
     return rows
@@ -302,6 +311,17 @@ def nastele_quote_rows(
                 round_pretty_vnd(quote.selling),
                 status,
                 quantity if presence == "value" else "",
+                product_id=str(
+                    getattr(offer, "id", "")
+                    or getattr(offer, "offer_id", "")
+                    or getattr(offer, "nastele_id", "")
+                    or ""
+                ),
+                variant_id=str(
+                    attrs.get("variant_id")
+                    or attrs.get("bien_the_id")
+                    or ""
+                ),
             )
         )
     return rows
@@ -316,6 +336,9 @@ def _customer_quote_row(
     price: Any,
     status_label: str,
     quantity: Any,
+    *,
+    product_id: str = "",
+    variant_id: str = "",
 ) -> dict[str, Any]:
     product = _display_product(name, variant)
     text = _customer_description(description, product)
@@ -329,6 +352,8 @@ def _customer_quote_row(
         "WARRANTY": quote_warranty(blob),
         "PRICE": price,
         "STOCK": _sheet_stock(status_label, quantity),
+        "ProductID": str(product_id or "").strip(),
+        "VariantID": str(variant_id or "").strip(),
     }
 
 
@@ -510,13 +535,24 @@ def list_menu_products(grid: list[list[Any]] | None) -> list[dict[str, Any]]:
     return rows
 
 
-def parse_menu_regions(grid: list[list[Any]] | None, header_index: int) -> list[MenuRegion]:
-    """Map mỗi Category Header tới vùng sản phẩm ngay bên dưới, đến header kế tiếp."""
+def parse_menu_regions(
+    grid: list[list[Any]] | None,
+    header_index: int,
+    *,
+    capacity: MenuCapacity | None = None,
+) -> list[MenuRegion]:
+    """Map mỗi Category Header tới vùng sản phẩm ngay bên dưới, đến header kế tiếp.
+
+    Ô A:H trống vẫn dùng được dù J:M đang có panel chính sách, miễn là trước
+    panel chi tiết và không có merge/công thức/protected trong A:H.
+    """
 
     sheet = grid or []
     regions: list[MenuRegion] = []
     current: MenuRegion | None = None
     last_row = max(len(sheet), header_index + 1)
+    if capacity is not None and capacity.last_writable_row is not None:
+        last_row = min(last_row, capacity.last_writable_row)
     for row_number in range(header_index + 2, last_row + 1):
         raw = sheet[row_number - 1] if row_number - 1 < len(sheet) else []
         if is_category_header_row(raw):
@@ -527,7 +563,7 @@ def parse_menu_regions(grid: list[list[Any]] | None, header_index: int) -> list[
             continue
         if is_menu_product_row(raw):
             current.product_rows.append(row_number)
-        elif _menu_data_empty(raw) and not _menu_ui_occupied(raw):
+        elif _menu_data_empty(raw) and not _menu_row_blocked(raw, row_number, capacity):
             current.empty_rows.append(row_number)
     if regions:
         return regions
@@ -536,11 +572,29 @@ def parse_menu_regions(grid: list[list[Any]] | None, header_index: int) -> list[
         raw = sheet[row_number - 1] if row_number - 1 < len(sheet) else []
         if is_menu_product_row(raw):
             implicit.product_rows.append(row_number)
-        elif _menu_data_empty(raw) and not _menu_ui_occupied(raw):
+        elif (
+            implicit.product_rows
+            and _menu_data_empty(raw)
+            and not _menu_row_blocked(raw, row_number, capacity)
+        ):
             implicit.empty_rows.append(row_number)
     if implicit.product_rows or implicit.empty_rows:
         regions.append(implicit)
     return regions
+
+
+def _menu_row_blocked(
+    raw: list[Any],
+    row_number: int,
+    capacity: MenuCapacity | None,
+) -> bool:
+    """Dòng A:H có merge/công thức/protected hoặc nằm trong panel chi tiết."""
+
+    if capacity is None:
+        return False
+    if not capacity.row_allowed(row_number):
+        return True
+    return any(capacity.cell_blocked(column, row_number) for column in range(MENU_COLUMNS))
 
 
 def assign_menu_category(row: dict[str, Any], regions: list[MenuRegion]) -> MenuRegion | None:
@@ -577,11 +631,17 @@ def plan_menu_cells(
     expire_missing: bool = False,
     nastele_from_catalog: bool = False,
     stock_column_only: bool = False,
+    strict_capacity: bool = False,
+    capacity: MenuCapacity | None = None,
 ) -> tuple[list[tuple[str, Any]], int, list[str]]:
-    """Cập nhật ô sản phẩm. stock_column_only chỉ ghi STOCK và STATUS của dòng đã có."""
+    """Cập nhật ô sản phẩm. stock_column_only chỉ ghi STOCK và STATUS của dòng đã có.
 
-    regions = parse_menu_regions(grid, header_index)
-    locked = _locked_menu_rows(grid, header_index, regions)
+    strict_capacity bật thì thiếu hàng trống là lỗi, không bỏ qua sản phẩm.
+    capacity giới hạn A:H trước panel J:M và kiểm tra vùng chọn K38/J39/J40.
+    """
+
+    regions = parse_menu_regions(grid, header_index, capacity=capacity)
+    locked = _locked_menu_rows(grid, header_index, regions, capacity=capacity)
     allocated = _allocated_menu_ids(grid)
     by_region_name, by_name = _menu_name_indexes(grid, regions, header_index)
     used_rows: set[int] = set()
@@ -590,6 +650,10 @@ def plan_menu_cells(
     placed = 0
     incoming = list(shop_rows) + list(nastele_rows)
     for item in incoming:
+        strict_item = (
+            strict_capacity
+            and str(item.get("Nguồn") or "") == SOURCE_SHOP
+        )
         region = assign_menu_category(item, regions)
         keys = _incoming_name_keys(item)
         row_number = _match_menu_row(keys, region, by_region_name, by_name, used_rows, locked)
@@ -602,17 +666,42 @@ def plan_menu_cells(
         item_id = ""
         if row_number is not None:
             item_id = str(_at(grid[row_number - 1] if row_number - 1 < len(grid) else [], 0) or "").strip()
+            if capacity is not None and not capacity.selector_covers(row_number):
+                name = str(item.get("PRODUCT") or "").strip() or "?"
+                message = _selector_not_wired_message(capacity, row_number, name, region)
+                if strict_item:
+                    raise MenuLayoutError(message)
+                notes.append(message)
+                continue
         elif region is None:
             name = str(item.get("PRODUCT") or "").strip() or "?"
+            if strict_item:
+                raise MenuLayoutError(
+                    f"Sản phẩm '{name}' chưa khớp vùng danh mục nào trên MENU. "
+                    "Không ghi để tránh đè layout."
+                )
             notes.append(f"Bỏ qua '{name}' vì chưa có vùng danh mục phù hợp.")
             continue
         else:
             row_number = _next_region_slot(region, used_rows, locked)
             if row_number is None:
                 name = str(item.get("PRODUCT") or "").strip() or "?"
+                if strict_item:
+                    raise MenuLayoutError(
+                        f"Vùng '{region.title or region.key}' trên MENU không còn hàng "
+                        f"trống cho '{name}'. Không ghi để tránh đè layout; thêm hàng "
+                        "trống trong đúng danh mục hoặc giảm sản phẩm nguồn."
+                    )
                 notes.append(
                     f"Bỏ qua '{name}' vì vùng '{region.title or region.key}' không còn hàng trống."
                 )
+                continue
+            if capacity is not None and not capacity.selector_covers(row_number):
+                name = str(item.get("PRODUCT") or "").strip() or "?"
+                message = _selector_not_wired_message(capacity, row_number, name, region)
+                if strict_item:
+                    raise MenuLayoutError(message)
+                notes.append(message)
                 continue
             item_id = _next_menu_id(region.prefix, allocated)
         if not item_id:
@@ -637,11 +726,14 @@ def plan_menu_cells(
             cells,
             shop_active=bool(shop_rows),
             nastele_active=nastele_from_catalog and bool(nastele_rows),
+            capacity=capacity,
         )
         if expired:
             notes.append(f"Đã đưa {expired} dòng không còn trong nguồn về STOCK 0.")
     if not stock_column_only:
-        _sanitize_existing_menu_descriptions(grid, header_index, cells, locked)
+        _sanitize_existing_menu_descriptions(
+            grid, header_index, cells, locked, capacity=capacity
+        )
     if not notes:
         if stock_column_only:
             notes.append("Đã cập nhật cột STOCK trên MENU. Giá, tên và mô tả giữ nguyên.")
@@ -651,6 +743,25 @@ def plan_menu_cells(
                 "Category Header và cột bảo hành bên phải giữ nguyên."
             )
     return cells, placed, notes
+
+
+def _selector_not_wired_message(
+    capacity: MenuCapacity,
+    row_number: int,
+    name: str,
+    region: MenuRegion | None,
+) -> str:
+    span = capacity.selector_span or "chưa xác định"
+    target = capacity.last_writable_row or row_number
+    area = region.title or region.key if region is not None else "MENU"
+    return (
+        f"Sản phẩm '{name}' cần dòng {row_number} trong vùng "
+        f"'{area}', nhưng dropdown K38 chỉ đọc {span} và "
+        f"công thức J39/J40 chỉ đọc tới dòng {capacity.selector_max_row}. "
+        "Không ghi để tránh sản phẩm không chọn được trên MENU. "
+        f"Cần mở rộng K38 và J39/J40 tới dòng {target} (hoặc dòng {row_number}) "
+        "trước khi đồng bộ."
+    )
 
 
 def _fold_category(value: object) -> str:
@@ -680,13 +791,12 @@ def _menu_data_empty(row: list[Any] | None) -> bool:
     return all(_blank(_at(raw, column)) for column in range(MENU_COLUMNS))
 
 
-def _menu_ui_occupied(row: list[Any] | None) -> bool:
-    raw = row or []
-    return any(not _blank(_at(raw, column)) for column in range(MENU_COLUMNS, len(raw)))
-
-
 def _locked_menu_rows(
-    grid: list[list[Any]], header_index: int, regions: list[MenuRegion]
+    grid: list[list[Any]],
+    header_index: int,
+    regions: list[MenuRegion],
+    *,
+    capacity: MenuCapacity | None = None,
 ) -> set[int]:
     locked = set(range(1, header_index + 2))
     for region in regions:
@@ -697,7 +807,7 @@ def _locked_menu_rows(
             continue
         if is_category_header_row(raw):
             locked.add(row_number)
-        elif _menu_data_empty(raw) and _menu_ui_occupied(raw):
+        elif capacity is not None and not capacity.row_allowed(row_number):
             locked.add(row_number)
         elif not is_menu_product_row(raw) and not _menu_data_empty(raw):
             locked.add(row_number)
@@ -888,6 +998,7 @@ def _expire_missing_menu_stock(
     *,
     shop_active: bool,
     nastele_active: bool,
+    capacity: MenuCapacity | None = None,
 ) -> int:
     """Dòng còn hiện IN STOCK hoặc LOW STOCK nhưng không còn trong catalog vừa đọc thì hết hàng.
 
@@ -904,6 +1015,8 @@ def _expire_missing_menu_stock(
             continue
         for row_number in region.product_rows:
             if row_number in seen or row_number in used_rows or row_number in locked:
+                continue
+            if capacity is not None and not capacity.selector_covers(row_number):
                 continue
             seen.add(row_number)
             raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
@@ -951,10 +1064,17 @@ def _sanitize_existing_menu_descriptions(
     header_index: int,
     cells: list[tuple[str, Any]],
     locked: set[int],
+    *,
+    capacity: MenuCapacity | None = None,
 ) -> None:
-    del locked
     pending = {cell_range for cell_range, _value in cells}
     for row_number, raw in enumerate(grid[header_index + 1 :], start=header_index + 2):
+        if row_number in locked:
+            continue
+        if capacity is not None and (
+            not capacity.selector_covers(row_number) or capacity.cell_blocked(2, row_number)
+        ):
+            continue
         current = _at(raw, 2)
         if _blank(current):
             continue
@@ -987,11 +1107,49 @@ def manual_quote_rows(grid: list[list[Any]] | None) -> tuple[list[dict[str, Any]
 def shop_sheet_rows(grid: list[list[Any]] | None) -> tuple[list[dict[str, Any]], str]:
     """Đọc BAO_GIA. Giá và STOCK giữ nguyên như trên sheet."""
 
+    assert_quote_sheet_layout(grid, tab=TAB_AUTO)
     rows, notes = _records_from_grid(grid, default_source=SOURCE_SHOP, only_source=SOURCE_SHOP)
     for row in rows:
         row.pop("_legacy", None)
         row["Nguồn"] = SOURCE_SHOP
     return rows, " ".join(notes)
+
+
+_SOURCE_LABELS = {SOURCE_SHOP.casefold(), SOURCE_MANUAL.casefold()}
+
+
+def quote_layout_problems(grid: list[list[Any]] | None, *, tab: str) -> list[str]:
+    """Phát hiện header đúng nhưng dữ liệu lệch cột (cột B đang chứa tên nguồn)."""
+
+    if not grid:
+        return []
+    headers = [_header(cell) for cell in grid[0]]
+    if not _headers_locked(headers):
+        return []
+    index = _header_index(headers)
+    product_column = index.get("PRODUCT")
+    if product_column is None:
+        return []
+    product_hits = 0
+    for raw in grid[1:]:
+        product = str(_at(raw, product_column) or "").strip().casefold()
+        next_cell = _at(raw, product_column + 1)
+        if product in _SOURCE_LABELS and not _blank(next_cell):
+            product_hits += 1
+    if not product_hits:
+        return []
+    return [
+        f"{tab}: {product_hits} dòng có cột PRODUCT đang là tên nguồn "
+        f"({SOURCE_SHOP}/{SOURCE_MANUAL}) thay vì tên sản phẩm. "
+        "Dữ liệu lệch cột (tên sản phẩm nằm ở DESCRIPTION, mô tả dài ở WARRANTY). "
+        "Không đọc/ghi để tránh tạo MENU sai."
+    ]
+
+
+def assert_quote_sheet_layout(grid: list[list[Any]] | None, *, tab: str) -> None:
+    problems = quote_layout_problems(grid, tab=tab)
+    if problems:
+        raise SheetLayoutError(" ".join(problems))
 
 
 def plan_tab(
@@ -1033,6 +1191,7 @@ def plan_tab(
             format_ui=True,
         )
 
+    assert_quote_sheet_layout(grid, tab=tab)
     index = _header_index(headers)
     existing = _existing_keys(grid, index)
     cells: list[tuple[str, Any]] = []
@@ -1178,12 +1337,20 @@ def build_quote_format_requests(
 
 
 class CombinedQuoteWriter:
-    def __init__(self, gateway: QuoteGateway, spreadsheet_id: str) -> None:
+    def __init__(
+        self,
+        gateway: QuoteGateway,
+        spreadsheet_id: str,
+        *,
+        layout_guard: MenuLayoutGuard | None = None,
+    ) -> None:
         cleaned = spreadsheet_id.strip()
         if not cleaned:
-            raise ConfigError("Thiếu LAST_SPREADSHEET_ID.")
+            raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
         self.gateway = gateway
         self.spreadsheet_id = cleaned
+        self.layout_guard = layout_guard
+        self._menu_guard: MenuLayoutGuard | None = None
 
     def update(
         self,
@@ -1410,6 +1577,19 @@ class CombinedQuoteWriter:
                 ),
                 0,
             )
+        header_cells = [
+            _header(cell).upper()
+            for cell in grid[header_index][:MENU_COLUMNS]
+        ]
+        if header_cells != [header.upper() for header in MENU_HEADERS]:
+            raise MenuLayoutError(
+                "Dòng tiêu đề MENU không đúng mẫu "
+                f"{' | '.join(MENU_HEADERS)}. Không ghi để giữ layout."
+            )
+        assert_menu_rows_valid(shop_rows, source=SOURCE_SHOP)
+        assert_menu_rows_valid(nastele_rows, source=SOURCE_MANUAL)
+        guard, capacity = self._menu_safety(grid)
+        self._menu_guard = guard
         cells, count, notes = plan_menu_cells(
             grid,
             shop_rows,
@@ -1418,7 +1598,10 @@ class CombinedQuoteWriter:
             expire_missing=expire_missing,
             nastele_from_catalog=nastele_from_catalog,
             stock_column_only=stock_column_only,
+            strict_capacity=not stock_column_only,
+            capacity=capacity,
         )
+        guard.check_cells(cells)
         return (
             TabPlan(
                 tab=TAB_MENU,
@@ -1427,6 +1610,37 @@ class CombinedQuoteWriter:
             ),
             count,
         )
+
+    def _menu_guard_for(self, grid: list[list[Any]]) -> MenuLayoutGuard:
+        """Whitelist từ merge hiện có, gộp với baseline cấu trúc đọc trước khi ghi."""
+
+        guard, _capacity = self._menu_safety(grid)
+        return guard
+
+    def _menu_safety(
+        self, grid: list[list[Any]]
+    ) -> tuple[MenuLayoutGuard, MenuCapacity | None]:
+        """Guard A–H và vùng capacity đọc từ cùng một baseline, không đọc hai lần."""
+
+        meta = self.gateway.list_sheet_meta(self.spreadsheet_id)
+        guard = menu_guard_from_sheet_meta(meta, max_row=len(grid))
+        if guard is None:
+            guard = MenuLayoutGuard(max_row=len(grid))
+        baseline_guard = self.layout_guard
+        baseline = None
+        try:
+            baseline = read_menu_baseline(
+                self.gateway,
+                self.spreadsheet_id,
+                MENU_HEADERS,
+            )
+            if baseline_guard is None:
+                baseline_guard = MenuLayoutGuard.from_baseline(baseline)
+        except Exception:
+            # Gateway không có cấu trúc hoặc lỗi tạm thời: vẫn khóa merge/A:H.
+            baseline = None
+        capacity = MenuCapacity.from_baseline(baseline) if baseline is not None else None
+        return guard.merged_with(baseline_guard), capacity
 
     def _apply(self, plans: list[TabPlan]) -> None:
         for plan in plans:
@@ -1443,6 +1657,12 @@ class CombinedQuoteWriter:
                 raise ConfigError(f"Từ chối ghi tab '{plan.tab}'.")
             if plan.tab == TAB_MENU and plan.full_grid is not None:
                 raise ConfigError("Từ chối ghi đè toàn bộ MENU. Chỉ cập nhật ô sản phẩm.")
+            if plan.tab == TAB_MENU and plan.format_ui:
+                raise ConfigError("Từ chối đổi định dạng MENU trong lúc đồng bộ sản phẩm.")
+            if plan.tab == TAB_MENU:
+                if self._menu_guard is None:
+                    raise ConfigError("Thiếu guard layout MENU. Không ghi ô nào.")
+                self._menu_guard.check_cells(plan.cells)
             if plan.create:
                 self.gateway.add_sheet(self.spreadsheet_id, plan.tab)
             unmerge = self._unmerge_requests(plan)
@@ -1464,6 +1684,10 @@ class CombinedQuoteWriter:
         needed = {plan.tab for plan in plans if plan.format_ui}
         if not needed:
             return
+        if TAB_MENU in needed:
+            raise ConfigError(
+                "Từ chối format MENU. Tab khách do người dùng quản lý, chỉ ghi giá trị A–H."
+            )
         meta = {
             str(item.get("title")): item
             for item in self.gateway.list_sheet_meta(self.spreadsheet_id)
@@ -1499,18 +1723,24 @@ def quote_layout_tables() -> list[tuple[str, list[str], list[list[str]]]]:
     stock = " / ".join(STOCK_VALUES)
     return [
         (
-            "Hai file Google",
-            ["File", "Biến môi trường", "Tab liên quan", "Ai ghi"],
+            "Một file Google duy nhất",
+            ["Khu vực", "Biến môi trường", "Tab liên quan", "Ai ghi"],
             [
                 [
-                    "Catalog Shop",
+                    "Catalog nội bộ",
                     "GOOGLE_SPREADSHEET_ID",
-                    "SAN_PHAM, BIEN_THE, BANG_GIA_BAN",
-                    "Tool ghi catalog. Không copy sang file tổng hợp.",
+                    "SAN_PHAM, BIEN_THE, BANG_GIA_BAN, LICH_SU_GIA, NHAT_KY_DONG_BO, CAU_HINH",
+                    "Tool ghi khi sync. Có giá gốc, không copy sang bảng khách.",
+                ],
+                [
+                    "Nguồn và ghép sản phẩm",
+                    "GOOGLE_SPREADSHEET_ID",
+                    "SO_SANH_NGUON, BANG_GIA_TOI_UU, CAN_GHEP_SAN_PHAM",
+                    "Tool ghi khi sync-sources. CAN_GHEP_SAN_PHAM giữ ô người dùng nhập.",
                 ],
                 [
                     "Báo giá chính thức",
-                    "LAST_SPREADSHEET_ID",
+                    "GOOGLE_SPREADSHEET_ID",
                     "MENU, NASTELEID, BAO_GIA, BAO_GIA_TONG_HOP",
                     "NASTELEID nhập tay. BAO_GIA ghi từ API. MENU ghép hai sheet đó.",
                 ],
@@ -1671,6 +1901,12 @@ def _menu_header_index(grid: list[list[Any]] | None) -> int | None:
         if cells[:2] == ["ID", "PRODUCT"]:
             return index
     return None
+
+
+def menu_header_row(grid: list[list[Any]] | None) -> int | None:
+    """Dòng tiêu đề MENU, tính từ 0. Dùng chung cho writer và bộ làm sạch mô tả."""
+
+    return _menu_header_index(grid)
 
 
 def _origin_row(origin: str) -> int:

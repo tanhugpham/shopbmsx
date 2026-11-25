@@ -1,6 +1,6 @@
 # Báo cáo kiểm thử
 
-Ngày chạy: 2026-11-23.
+Ngày chạy: 2026-11-25.
 
 Môi trường: Windows, Python 3.13.15, thư viện trong `requirements.txt` (httpx 0.28.1, pydantic 2.14.4, pytest 9.2.0, tenacity 9.2.1, google-api-python-client 2.202.0).
 
@@ -9,10 +9,11 @@ Môi trường: Windows, Python 3.13.15, thư viện trong `requirements.txt` (h
 ```powershell
 cd shopxoainon-integration
 $env:PYTHONPATH = "src"
+$env:PYTHONUTF8 = "1"
 python -m pytest --tb=short
 ```
 
-Kết quả lần chạy sau cùng: **166 passed**. Suite này gồm các test Phase 4.1, test nhiều nhà cung cấp, và test Phase 4.2.1 cho catalog rỗng.
+Kết quả lần chạy sau cùng: **309 passed, 0 failed** (Phase 4.3F). Suite gồm test Phase 4.1, nhiều nhà cung cấp, Phase 4.2.1 cho catalog rỗng, 16 test Phase 4.3B cho một spreadsheet duy nhất, 14 test Phase 4.3D cho vùng MENU A31:H35, 17 test Phase 4.3E cho migration nguồn/MENU, 23 test Phase 4.3F cho catalog hai tầng và MENU khách, cùng test scheduler chỉ ghi khi opt-in.
 
 Không có test nào bị bỏ qua. Không có test nào ghi đè kết quả mạng bằng dữ liệu giả và gọi đó là thành công ngoài đời.
 
@@ -150,3 +151,18 @@ Xác thực: PASS. Catalog: EMPTY, trạng thái `NASTELE_CATALOG_EMPTY`. Không
 Backup local: FAIL cho scheduled live sync. Workflow giữ `DRY_RUN=true`. Khôi phục không ghi `Trang tính1` hay tab ngoài vùng quản lý.
 
 Kiểm tra đọc thật ngày 2026-11-23, không ghi Google: Shop Xoài Non `GET /products` HTTP 200, 24 nguồn. Nastele `GET /api/partner/products` HTTP 200, `success=true`, mảng `data` dài 0. Spreadsheet chính đọc được 5 tab, chưa có `SO_SANH_NGUON`. Spreadsheet Nastele đọc được 1 tab, không tạo tab mới. Google Doc đọc được, một vùng báo cáo Shop, chưa có vùng bảng giá khách. `DRY_RUN` vẫn `true`. Không gọi đơn hàng.
+
+## Phase 4.3B — một Google Spreadsheet
+
+Spreadsheet chính thức: `196goR1lDZN6zJfoC3a7vOVyo5u9o-pvxXpc3mnGrGSY`. Đọc thật ngày 2026-11-25, không ghi ô:
+
+| Tab | Dòng dữ liệu | Ghi chú |
+| --- | --- | --- |
+| `MENU` | 39 | Header ở dòng 6, 62 vùng merge, 29 ô cột J–M có nội dung |
+| `NASTELEID` | 1 | Dòng tiêu đề |
+| `BAO_GIA` | 23 | Tool sẽ cập nhật |
+| `BAO_GIA_TONG_HOP` | 24 | Tool sẽ cập nhật |
+
+Chưa có `SAN_PHAM`, `BIEN_THE`, `BANG_GIA_BAN`, `SO_SANH_NGUON`, `BANG_GIA_TOI_UU`, `CAN_GHEP_SAN_PHAM` và các tab `NASTELE_*`. Lần ghi thật đầu tiên sẽ tạo tab; hiện **BLOCKED** vì backup chưa đạt. `restore-plan` chặn bởi xung đột Docs; không chạy `restore`.
+
+16 test Phase 4.3B nằm trong `tests/test_phase43_single_spreadsheet.py`: một ID duy nhất, biến cũ bị bỏ qua, `config-check`, dùng chung credentials/gateway, hai writer cùng một spreadsheet, catalog Nastele rỗng không tạo dòng, giá và ghép nguồn, chống nhân đôi, MENU giữ cột J–M và merge, dry-run không ghi, tab LEGACY, không mua hàng/Telegram.

@@ -312,7 +312,7 @@ def test_missing_last_id_and_dry_run_do_not_write() -> None:
             raise AssertionError(range_a1)
 
     quote = Exploding([], {})
-    settings = make_settings(dry_run=True, last_spreadsheet_id="  ")
+    settings = make_settings(dry_run=True, google_spreadsheet_id="  ")
     shop = MemorySheets(titles=["SAN_PHAM"], values={"SAN_PHAM": [["Product ID"]]})
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -348,7 +348,7 @@ def test_report_updates_quote_values_without_shop_sheet_writes() -> None:
         titles=["SAN_PHAM", "BIEN_THE"],
         values={"SAN_PHAM": [["Product ID"], ["local_old"]]},
     )
-    settings = make_settings(dry_run=False, last_spreadsheet_id=" last-id ")
+    settings = make_settings(dry_run=False, google_spreadsheet_id=" last-id ")
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -483,14 +483,17 @@ def test_missing_name_header_skips_manual_tab() -> None:
     assert "PRODUCT" in warning
 
 
-def test_quote_layout_tables_cover_both_files() -> None:
+def test_quote_layout_tables_cover_single_spreadsheet() -> None:
     tables = {title: (headers, rows) for title, headers, rows in quote_layout_tables()}
-    files = tables["Hai file Google"][1]
-    assert files[0][0] == "Catalog Shop"
-    assert files[0][1] == "GOOGLE_SPREADSHEET_ID"
-    assert files[1][0] == "Báo giá chính thức"
-    assert files[1][1] == "LAST_SPREADSHEET_ID"
-    assert "MENU" in files[1][2]
+    files = tables["Một file Google duy nhất"][1]
+    assert [row[0] for row in files] == [
+        "Catalog nội bộ",
+        "Nguồn và ghép sản phẩm",
+        "Báo giá chính thức",
+    ]
+    assert {row[1] for row in files} == {"GOOGLE_SPREADSHEET_ID"}
+    assert "MENU" in files[2][2]
+    assert not any("LAST_SPREADSHEET_ID" in row[1] for row in files)
     columns = tables["Cột khóa — dòng 1 của NASTELEID và BAO_GIA"][1]
     assert [row[0] for row in columns] == list(QUOTE_HEADERS)
     assert "local id" in columns[0][1]
@@ -498,6 +501,7 @@ def test_quote_layout_tables_cover_both_files() -> None:
     assert text.count("|") > 20
     assert "Giá gốc" in text
     assert "Không copy từ file catalog" in text
+    assert "LAST_SPREADSHEET_ID" not in text
 
 
 def test_quote_layout_command_prints_tables() -> None:

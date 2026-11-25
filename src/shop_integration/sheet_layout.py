@@ -50,6 +50,17 @@ ALL_TABS = [
     TAB_CONFIG,
 ]
 
+# Phase 4.3B: tab cũ trùng mục đích với bảng khách chính thức. Không xóa trong phase này.
+# Chỉ đánh dấu để người vận hành biết có thể ẩn hoặc hợp nhất sau khi đối chiếu công thức.
+LEGACY_TAB_NOTES = {
+    "BANG_GIA_TOI_UU": "Bảng giá khách của sync-sources. BAO_GIA_TONG_HOP là bảng khách chính thức.",
+    "NASTELE_SAN_PHAM": "Danh mục Nastele chi tiết. NASTELEID là danh mục nhập tay chính thức.",
+    "NASTELE_GIA_SI": "Bậc giá sỉ Nastele. Chỉ tham chiếu, không lên bảng khách.",
+    "NASTELE_LICH_SU_GIA": "Lịch sử giá Nastele. LICH_SU_GIA là lịch sử giá Shop Xoài Non.",
+    "NASTELE_NHAT_KY": "Nhật ký Nastele. NHAT_KY_DONG_BO là nhật ký đồng bộ chung.",
+    "NASTELE_CAU_HINH": "Cấu hình Nastele. CAU_HINH là cấu hình chung.",
+}
+
 # Cột schema cũ được đổi tên khi ghép. Giá trị cột mới thắng nếu cả hai cùng có.
 PRODUCT_HEADER_MAP = {
     "Tên sản phẩm": "Tên sản phẩm đã decode",
