@@ -18,7 +18,7 @@ services:
         value: "3.13.7"
       - key: DRY_RUN
         value: "true"
-      # Không bật bất kỳ scheduler nào trong giai đoạn Phase 4.3F.
+      # Render không ghi MENU. GitHub Actions sync-menu là scheduler duy nhất.
       - key: ENABLE_SCHEDULED_SYNC
         value: "false"
       - key: ENABLE_SCHEDULED_MENU_LIVE

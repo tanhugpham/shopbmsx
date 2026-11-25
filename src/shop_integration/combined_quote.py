@@ -631,6 +631,41 @@ def assign_menu_category(row: dict[str, Any], regions: list[MenuRegion]) -> Menu
     return shop_like[0] if shop_like else None
 
 
+_ACTIVATION_MARKERS = ("kích hoạt", "kich hoat")
+_DEFAULT_WARRANTY = "Bảo hành 1:1"
+
+
+def _keep_operator_terms(
+    raw: list[Any],
+    wanted: list[Any],
+    *,
+    description_locked: bool,
+) -> list[Any]:
+    """Giữ đoạn kích hoạt thủ công và bảo hành đã ghi khi nguồn không nêu mã mới.
+
+    Giá và tồn vẫn lấy từ ``wanted``. Mô tả đã khóa không bị kéo về câu cũ.
+    Mã bảo hành nguồn nêu rõ (BHF, KBH, BH…) vẫn cập nhật ô WARRANTY.
+    """
+
+    row = list(wanted)
+    current_description = _at(raw, 2)
+    if (
+        not description_locked
+        and isinstance(current_description, str)
+        and current_description.strip()
+        and any(marker in current_description.casefold() for marker in _ACTIVATION_MARKERS)
+        and not _same(current_description, row[2] if len(row) > 2 else "")
+    ):
+        row[2] = current_description
+    current_warranty = str(_at(raw, 4) or "").strip()
+    incoming_warranty = str(row[4] if len(row) > 4 else "").strip()
+    if current_warranty and incoming_warranty == _DEFAULT_WARRANTY and current_warranty != incoming_warranty:
+        while len(row) <= 4:
+            row.append("")
+        row[4] = current_warranty
+    return row
+
+
 def plan_menu_cells(
     grid: list[list[Any]],
     shop_rows: list[dict[str, Any]],
@@ -729,6 +764,12 @@ def plan_menu_cells(
             if region is not None:
                 by_region_name[(region.key, key)] = row_number
         wanted = _menu_product_row(item_id, item)
+        raw_existing = grid[row_number - 1] if row_number - 1 < len(grid) else []
+        wanted = _keep_operator_terms(
+            raw_existing,
+            wanted,
+            description_locked=bool(item.get("_description_locked")),
+        )
         if stock_column_only or loose_stock:
             _append_menu_stock_changes(cells, grid, row_number, wanted, locked)
         else:

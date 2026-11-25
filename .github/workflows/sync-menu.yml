@@ -1,36 +1,88 @@
 name: sync-menu
 
-# Chỉ chạy tay và luôn dry-run trong giai đoạn Phase 4.3F.
-# Không có cron. Không ghi Google Sheets/Docs. Không tạo đơn và không commit dữ liệu.
+# GitHub Actions là scheduler ghi MENU duy nhất.
+# Cron có thể trễ, không cam kết đúng từng 5 phút.
+# Render giữ scheduler tắt. sync-sources vẫn chỉ đọc.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: sync-menu
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   sync-menu:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
       - name: Install
         run: pip install -r requirements.txt
+
+      - name: Check required secret names
+        env:
+          SHOP_XOAI_NON_API_KEY: ${{ secrets.SHOP_XOAI_NON_API_KEY }}
+          GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+        run: |
+          missing=0
+          for name in SHOP_XOAI_NON_API_KEY GOOGLE_SPREADSHEET_ID GOOGLE_CREDENTIALS_JSON; do
+            if [ -z "${!name}" ]; then
+              echo "Thiếu secret ${name}"
+              missing=1
+            else
+              echo "Secret ${name}: có"
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Write Google credentials from secret
         env:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
-          if [ -n "$GOOGLE_CREDENTIALS_JSON" ]; then
-            printf '%s' "$GOOGLE_CREDENTIALS_JSON" > GOOGLE_CREDENTIALS_FILE.json
+          if [ -z "$GOOGLE_CREDENTIALS_JSON" ]; then
+            echo "Thiếu secret GOOGLE_CREDENTIALS_JSON"
+            exit 1
           fi
-      - name: Dry-run MENU
+          printf '%s' "$GOOGLE_CREDENTIALS_JSON" > GOOGLE_CREDENTIALS_FILE.json
+
+      - name: Preflight
         env:
           PYTHONPATH: src
-          DRY_RUN: "true"
           ENABLE_PURCHASE: "false"
           ENABLE_TELEGRAM: "false"
           ENABLE_SCHEDULED_SYNC: "false"
           ENABLE_SCHEDULED_MENU_LIVE: "false"
+          MENU_BASELINE_FILE: data/menu-baseline.json
+          MENU_REQUIRE_DURABLE_BACKUP: "true"
+          SHOP_XOAI_NON_API_KEY: ${{ secrets.SHOP_XOAI_NON_API_KEY }}
+          NASTELE_API_KEY: ${{ secrets.NASTELE_API_KEY }}
+          GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+          GOOGLE_DOCUMENT_ID: ${{ secrets.GOOGLE_DOCUMENT_ID }}
+          GOOGLE_CREDENTIALS_FILE: ./GOOGLE_CREDENTIALS_FILE.json
+        run: python -m shop_integration sync-menu-preflight --verify-backup
+
+      - name: Live MENU sync
+        env:
+          PYTHONPATH: src
+          DRY_RUN: "false"
+          ENABLE_PURCHASE: "false"
+          ENABLE_TELEGRAM: "false"
+          ENABLE_SCHEDULED_SYNC: "false"
+          ENABLE_SCHEDULED_MENU_LIVE: "false"
+          MENU_BASELINE_FILE: data/menu-baseline.json
+          MENU_REQUIRE_DURABLE_BACKUP: "true"
           SHOP_XOAI_NON_API_KEY: ${{ secrets.SHOP_XOAI_NON_API_KEY }}
           NASTELE_API_KEY: ${{ secrets.NASTELE_API_KEY }}
           GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}

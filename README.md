@@ -57,7 +57,7 @@ python -m shop_integration sync
 - Mọi chuyển hướng HTTP bị từ chối để không gửi API key sang máy chủ khác.
 - `POST /orders` và `GET /orders/{id}/delivery` bị chặn trước khi mở kết nối.
 - `ENABLE_PURCHASE=true` và `ENABLE_TELEGRAM=true` bị bỏ qua.
-- Phase 4.3F không bật scheduler ghi Google: `ENABLE_SCHEDULED_SYNC=false`, `ENABLE_SCHEDULED_MENU_LIVE=false`; workflow `sync-menu` chỉ chạy tay với `DRY_RUN=true`.
+- Render không ghi MENU: `ENABLE_SCHEDULED_SYNC=false`, `ENABLE_SCHEDULED_MENU_LIVE=false`. Workflow `sync-menu` là scheduler duy nhất, khoảng mỗi 5 phút sau preflight, với `DRY_RUN=false`. Cron GitHub có thể trễ.
 
 Deploy Render miễn phí (Web Service, không Cron, không thẻ): [docs/render_free.md](docs/render_free.md).
 

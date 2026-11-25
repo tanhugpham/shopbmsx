@@ -1,0 +1,795 @@
+{
+  "schema": 2,
+  "tab": "MENU",
+  "sheet_id": 0,
+  "grid_properties": {
+    "rowCount": 1000,
+    "columnCount": 26,
+    "frozenRowCount": 6
+  },
+  "captured_at": "2026-11-25T19:02:42+07:00",
+  "headers": [
+    "ID",
+    "PRODUCT",
+    "DESCRIPTION",
+    "DURATION",
+    "WARRANTY",
+    "PRICE",
+    "STOCK",
+    "STATUS"
+  ],
+  "header_row": 6,
+  "data_rows": 40,
+  "data_columns": 12,
+  "merge_count": 62,
+  "merged_ranges": [
+    {
+      "startRowIndex": 1,
+      "endRowIndex": 2,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 1,
+      "endRowIndex": 2,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 2,
+      "endRowIndex": 3,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 2,
+      "endRowIndex": 3,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 3,
+      "endRowIndex": 4,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 3,
+      "endRowIndex": 4,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 4,
+      "endRowIndex": 5,
+      "startColumnIndex": 0,
+      "endColumnIndex": 6
+    },
+    {
+      "startRowIndex": 4,
+      "endRowIndex": 5,
+      "startColumnIndex": 6,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 4,
+      "endRowIndex": 5,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 5,
+      "endRowIndex": 6,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 6,
+      "endRowIndex": 7,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 7,
+      "endRowIndex": 8,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 8,
+      "endRowIndex": 10,
+      "startColumnIndex": 9,
+      "endColumnIndex": 10
+    },
+    {
+      "startRowIndex": 8,
+      "endRowIndex": 9,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 9,
+      "endRowIndex": 10,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 10,
+      "endRowIndex": 12,
+      "startColumnIndex": 9,
+      "endColumnIndex": 10
+    },
+    {
+      "startRowIndex": 10,
+      "endRowIndex": 11,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 11,
+      "endRowIndex": 12,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 12,
+      "endRowIndex": 14,
+      "startColumnIndex": 9,
+      "endColumnIndex": 10
+    },
+    {
+      "startRowIndex": 12,
+      "endRowIndex": 13,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 13,
+      "endRowIndex": 14,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 14,
+      "endRowIndex": 15,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 15,
+      "endRowIndex": 16,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 16,
+      "endRowIndex": 17,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 17,
+      "endRowIndex": 18,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 18,
+      "endRowIndex": 19,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 19,
+      "endRowIndex": 20,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 20,
+      "endRowIndex": 21,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 21,
+      "endRowIndex": 22,
+      "startColumnIndex": 9,
+      "endColumnIndex": 11
+    },
+    {
+      "startRowIndex": 21,
+      "endRowIndex": 22,
+      "startColumnIndex": 11,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 22,
+      "endRowIndex": 23,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 23,
+      "endRowIndex": 24,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 24,
+      "endRowIndex": 25,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 25,
+      "endRowIndex": 26,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 26,
+      "endRowIndex": 27,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 27,
+      "endRowIndex": 28,
+      "startColumnIndex": 9,
+      "endColumnIndex": 11
+    },
+    {
+      "startRowIndex": 27,
+      "endRowIndex": 28,
+      "startColumnIndex": 11,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 28,
+      "endRowIndex": 29,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 29,
+      "endRowIndex": 30,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 30,
+      "endRowIndex": 31,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 31,
+      "endRowIndex": 32,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 32,
+      "endRowIndex": 33,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 33,
+      "endRowIndex": 34,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 34,
+      "endRowIndex": 35,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 36,
+      "endRowIndex": 37,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 37,
+      "endRowIndex": 38,
+      "startColumnIndex": 10,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 38,
+      "endRowIndex": 39,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 39,
+      "endRowIndex": 45,
+      "startColumnIndex": 9,
+      "endColumnIndex": 13
+    },
+    {
+      "startRowIndex": 45,
+      "endRowIndex": 46,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 46,
+      "endRowIndex": 47,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 47,
+      "endRowIndex": 48,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 48,
+      "endRowIndex": 49,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 49,
+      "endRowIndex": 50,
+      "startColumnIndex": 0,
+      "endColumnIndex": 2
+    },
+    {
+      "startRowIndex": 49,
+      "endRowIndex": 50,
+      "startColumnIndex": 2,
+      "endColumnIndex": 4
+    },
+    {
+      "startRowIndex": 49,
+      "endRowIndex": 50,
+      "startColumnIndex": 4,
+      "endColumnIndex": 6
+    },
+    {
+      "startRowIndex": 49,
+      "endRowIndex": 50,
+      "startColumnIndex": 6,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 50,
+      "endRowIndex": 51,
+      "startColumnIndex": 0,
+      "endColumnIndex": 2
+    },
+    {
+      "startRowIndex": 50,
+      "endRowIndex": 51,
+      "startColumnIndex": 2,
+      "endColumnIndex": 4
+    },
+    {
+      "startRowIndex": 50,
+      "endRowIndex": 51,
+      "startColumnIndex": 4,
+      "endColumnIndex": 6
+    },
+    {
+      "startRowIndex": 50,
+      "endRowIndex": 51,
+      "startColumnIndex": 6,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 51,
+      "endRowIndex": 52,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    },
+    {
+      "startRowIndex": 52,
+      "endRowIndex": 53,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8
+    }
+  ],
+  "formulas": [
+    {
+      "cell": "G5",
+      "formula": "=NOW()"
+    },
+    {
+      "cell": "J39",
+      "formula": "=\"⏱️ Thời hạn: \" & IFERROR(VLOOKUP(K38; B8:H35; 3; FALSE); \"—\") & \"  •  🛡️ BH: \" & IFERROR(VLOOKUP(K38; B8:H35; 4; FALSE); \"—\") & \"  •  💰 \" & IFERROR(TEXT(VLOOKUP(K38; B8:H35; 5; FALSE); \"#,##0\"); \"—\") & \" đ\""
+    },
+    {
+      "cell": "J40",
+      "formula": "=IFERROR(VLOOKUP(K38; BAO_GIA_TONG_HOP!B2:E26; 4; FALSE); IFERROR(VLOOKUP(K38; B8:C35; 2; FALSE); \"Vui lòng chọn sản phẩm ở ô trên để xem mô tả chi tiết.\"))"
+    }
+  ],
+  "data_validations": [
+    {
+      "range": "K38:K38",
+      "type": "ONE_OF_RANGE",
+      "values": [
+        {
+          "userEnteredValue": "=MENU!$B$8:$B$35"
+        }
+      ],
+      "rows": [
+        38
+      ]
+    }
+  ],
+  "conditional_format_count": 8,
+  "column_widths": {
+    "A": 75,
+    "B": 230,
+    "C": 110,
+    "D": 105,
+    "E": 115,
+    "F": 125,
+    "G": 85,
+    "H": 125,
+    "I": 28,
+    "J": 110,
+    "K": 175,
+    "L": 185,
+    "M": 140
+  },
+  "row_heights": {},
+  "protected_cells": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A46",
+    "A47",
+    "A48",
+    "A49",
+    "A5",
+    "A50",
+    "A51",
+    "A52",
+    "A53",
+    "A6",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "B46",
+    "B47",
+    "B48",
+    "B49",
+    "B5",
+    "B50",
+    "B51",
+    "B52",
+    "B53",
+    "B6",
+    "C1",
+    "C2",
+    "C3",
+    "C4",
+    "C46",
+    "C47",
+    "C48",
+    "C49",
+    "C5",
+    "C50",
+    "C51",
+    "C52",
+    "C53",
+    "C6",
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D46",
+    "D47",
+    "D48",
+    "D49",
+    "D5",
+    "D50",
+    "D51",
+    "D52",
+    "D53",
+    "D6",
+    "E1",
+    "E2",
+    "E3",
+    "E4",
+    "E46",
+    "E47",
+    "E48",
+    "E49",
+    "E5",
+    "E50",
+    "E51",
+    "E52",
+    "E53",
+    "E6",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F46",
+    "F47",
+    "F48",
+    "F49",
+    "F5",
+    "F50",
+    "F51",
+    "F52",
+    "F53",
+    "F6",
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G46",
+    "G47",
+    "G48",
+    "G49",
+    "G5",
+    "G50",
+    "G51",
+    "G52",
+    "G53",
+    "G6",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H46",
+    "H47",
+    "H48",
+    "H49",
+    "H5",
+    "H50",
+    "H51",
+    "H52",
+    "H53",
+    "H6",
+    "I1",
+    "I10",
+    "I11",
+    "I12",
+    "I13",
+    "I14",
+    "I15",
+    "I16",
+    "I17",
+    "I18",
+    "I19",
+    "I2",
+    "I20",
+    "I21",
+    "I22",
+    "I23",
+    "I24",
+    "I25",
+    "I26",
+    "I27",
+    "I28",
+    "I29",
+    "I3",
+    "I30",
+    "I31",
+    "I32",
+    "I33",
+    "I34",
+    "I35",
+    "I36",
+    "I37",
+    "I38",
+    "I39",
+    "I4",
+    "I40",
+    "I5",
+    "I6",
+    "I7",
+    "I8",
+    "I9",
+    "J1",
+    "J10",
+    "J11",
+    "J12",
+    "J13",
+    "J14",
+    "J15",
+    "J16",
+    "J17",
+    "J18",
+    "J19",
+    "J2",
+    "J20",
+    "J21",
+    "J22",
+    "J23",
+    "J24",
+    "J25",
+    "J26",
+    "J27",
+    "J28",
+    "J29",
+    "J3",
+    "J30",
+    "J31",
+    "J32",
+    "J33",
+    "J34",
+    "J35",
+    "J36",
+    "J37",
+    "J38",
+    "J39",
+    "J4",
+    "J40",
+    "J41",
+    "J42",
+    "J43",
+    "J44",
+    "J45",
+    "J5",
+    "J6",
+    "J7",
+    "J8",
+    "J9",
+    "K1",
+    "K10",
+    "K11",
+    "K12",
+    "K13",
+    "K14",
+    "K15",
+    "K16",
+    "K17",
+    "K18",
+    "K19",
+    "K2",
+    "K20",
+    "K21",
+    "K22",
+    "K23",
+    "K24",
+    "K25",
+    "K26",
+    "K27",
+    "K28",
+    "K29",
+    "K3",
+    "K30",
+    "K31",
+    "K32",
+    "K33",
+    "K34",
+    "K35",
+    "K36",
+    "K37",
+    "K38",
+    "K39",
+    "K4",
+    "K40",
+    "K41",
+    "K42",
+    "K43",
+    "K44",
+    "K45",
+    "K5",
+    "K6",
+    "K7",
+    "K8",
+    "K9",
+    "L1",
+    "L10",
+    "L11",
+    "L12",
+    "L13",
+    "L14",
+    "L15",
+    "L16",
+    "L17",
+    "L18",
+    "L19",
+    "L2",
+    "L20",
+    "L21",
+    "L22",
+    "L23",
+    "L24",
+    "L25",
+    "L26",
+    "L27",
+    "L28",
+    "L29",
+    "L3",
+    "L30",
+    "L31",
+    "L32",
+    "L33",
+    "L34",
+    "L35",
+    "L36",
+    "L37",
+    "L38",
+    "L39",
+    "L4",
+    "L40",
+    "L41",
+    "L42",
+    "L43",
+    "L44",
+    "L45",
+    "L5",
+    "L6",
+    "L7",
+    "L8",
+    "L9",
+    "M1",
+    "M10",
+    "M11",
+    "M12",
+    "M13",
+    "M14",
+    "M15",
+    "M16",
+    "M17",
+    "M18",
+    "M19",
+    "M2",
+    "M20",
+    "M21",
+    "M22",
+    "M23",
+    "M24",
+    "M25",
+    "M26",
+    "M27",
+    "M28",
+    "M29",
+    "M3",
+    "M30",
+    "M31",
+    "M32",
+    "M33",
+    "M34",
+    "M35",
+    "M36",
+    "M37",
+    "M38",
+    "M39",
+    "M4",
+    "M40",
+    "M41",
+    "M42",
+    "M43",
+    "M44",
+    "M45",
+    "M5",
+    "M6",
+    "M7",
+    "M8",
+    "M9"
+  ],
+  "protected_ranges": [
+    {
+      "startRowIndex": 0,
+      "endRowIndex": 6,
+      "startColumnIndex": 0,
+      "endColumnIndex": 8,
+      "warningOnly": true
+    },
+    {
+      "startRowIndex": 0,
+      "endRowIndex": 55,
+      "startColumnIndex": 8,
+      "endColumnIndex": 13,
+      "warningOnly": true
+    }
+  ],
+  "protected_ranges_captured": true
+}

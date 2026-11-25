@@ -140,6 +140,7 @@ class OverrideStore:
             current = _text(row.get("DESCRIPTION"))
             locked_text = override.resolve("display_description", current, current)
             row["DESCRIPTION"] = public_description(locked_text)
+            row["_description_locked"] = True
         if "duration" in override.locked_fields:
             current = _text(row.get("DURATION"))
             row["DURATION"] = override.resolve("duration", current, current)

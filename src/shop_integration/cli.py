@@ -103,6 +103,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sync_menu.set_defaults(func=command_sync_menu)
 
+    preflight = commands.add_parser(
+        "sync-menu-preflight",
+        help="Kiểm tra secret, baseline, quyền Sheets và scheduler. Không ghi MENU.",
+    )
+    preflight.add_argument(
+        "--verify-backup",
+        action="store_true",
+        help="Ghi và đọc lại tab backup bền. Không ghi MENU.",
+    )
+    preflight.set_defaults(func=command_sync_menu_preflight)
+
     menu_baseline = commands.add_parser(
         "menu-baseline",
         help="Chụp cấu trúc MENU (merge, công thức, dropdown, khổ cột/dòng). Chỉ đọc.",
@@ -539,7 +550,15 @@ def command_sync_menu(args: argparse.Namespace, settings: Settings) -> int:
 
     result = run_menu_sync(settings, live=not settings.dry_run)
     print(result.text)
+    if not settings.dry_run and not result.live:
+        return 1
     return 0 if result.status in {"ok", "locked", "partial"} else 1
+
+
+def command_sync_menu_preflight(args: argparse.Namespace, settings: Settings) -> int:
+    from shop_integration.menu_preflight import run_preflight
+
+    return run_preflight(settings, verify_backup=bool(args.verify_backup))
 
 
 def command_menu_baseline(args: argparse.Namespace, settings: Settings) -> int:

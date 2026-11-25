@@ -65,17 +65,15 @@ Invoke-WebRequest -Uri "https://shopxoainon-web.onrender.com/sync-sources" -Meth
 
 Không có token → HTTP 403. Lệnh này **không ghi Google** (`DRY_RUN=true` bị khóa trong code).
 
-## C. MENU: không bật lịch ghi trong Phase 4.3F
+## C. MENU: GitHub Actions ghi, Render không ghi
 
-Render Free không có Cron (Cron là gói trả phí). Không bật dịch vụ trả phí.
-
-Trong giai đoạn này **không cho scheduler nào ghi Google Sheets/Docs**:
+Render Free không có Cron (Cron là gói trả phí). Không bật scheduler trên Render.
 
 - `ENABLE_SCHEDULED_SYNC=false`: Web Service không chạy thread MENU.
-- `ENABLE_SCHEDULED_MENU_LIVE=false`: mọi lần gọi `/sync-menu` chỉ dry-run.
-- `.github/workflows/sync-menu.yml` chỉ còn `workflow_dispatch` (chạy tay), `DRY_RUN=true`, không có cron.
+- `ENABLE_SCHEDULED_MENU_LIVE=false`: mọi lần gọi `/sync-menu` trên Render chỉ dry-run.
+- `.github/workflows/sync-menu.yml` là scheduler ghi MENU duy nhất. Cron `*/5 * * * *` có thể trễ. Job chạy preflight, backup tab `_MENU_SYNC_BACKUP`, rồi `DRY_RUN=false`.
+- `ENABLE_PURCHASE=false` và `ENABLE_TELEGRAM=false` trong workflow.
 - Không dùng `setInterval` trình duyệt và không ping liên tục để giả Cron.
-- Chỉ sau khi Phase 4.3E migration được phê duyệt và backup Google đã verified mới xem xét bật lại lịch ghi.
 
 Workflow `.github/workflows/sync-sources.yml` vẫn đọc nguồn mỗi ngày với `DRY_RUN=true`; đây là lịch chỉ đọc, không ghi Google.
 

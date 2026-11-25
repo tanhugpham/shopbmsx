@@ -179,15 +179,19 @@ def _run_menu_sync(
     manual_count = 0
     policy = policy_from_settings(settings)
     notes.append("NASTELEID chỉ nhập tay. Không ghi sheet này từ API.")
+    blocked = _guard_live_write(settings, notes, errors, live=live)
+    if blocked:
+        live = False
 
-    try:
-        products, parse_notes = _load_shop_products(settings, shop_client)
-        notes.extend(parse_notes)
-    except Exception as exc:
-        errors.append(f"Nguồn shop lỗi: {exc}")
-        notes.append("Giữ BAO_GIA hiện có vì nguồn shop lỗi. MENU vẫn đọc hai sheet.")
+    if not blocked:
+        try:
+            products, parse_notes = _load_shop_products(settings, shop_client)
+            notes.extend(parse_notes)
+        except Exception as exc:
+            errors.append(f"Nguồn shop lỗi: {exc}")
+            notes.append("Giữ BAO_GIA hiện có vì nguồn shop lỗi. MENU vẫn đọc hai sheet.")
 
-    shop_rows = shop_quote_rows(products, policy)
+    shop_rows = shop_quote_rows(products, policy) if not blocked else []
     own_gateway = False
     if gateway is None:
         gateway = _open_gateway(settings)
@@ -201,6 +205,11 @@ def _run_menu_sync(
         errors.append("Thiếu GOOGLE_SPREADSHEET_ID.")
     elif gateway is None:
         errors.append("Thiếu kết nối Google Sheets.")
+    elif blocked:
+        notes.append("Không ghi MENU vì cổng an toàn chưa đạt.")
+    elif _require_durable_backup(settings, gateway, notes, errors, live=live):
+        live = False
+        notes.append("Không ghi MENU vì backup bền chưa được kiểm tra.")
     else:
         layout_guard: MenuLayoutGuard | None = None
         layout_blocked = False
@@ -237,6 +246,7 @@ def _run_menu_sync(
                     guarded,
                     spreadsheet_id,
                     live=live,
+                    tabs=("SAN_PHAM", "BIEN_THE", "BAO_GIA", "BAO_GIA_TONG_HOP"),
                 )
                 cells_written += extra_cells
             except Exception as exc:
@@ -266,6 +276,55 @@ def _run_menu_sync(
     _remember(payload)
     logger.info(redact(payload.text, settings.secret_values()))
     return payload
+
+
+def _guard_live_write(
+    settings: Settings,
+    notes: list[str],
+    errors: list[str],
+    *,
+    live: bool,
+) -> bool:
+    """Chặn ghi khi file khóa nội dung hỏng. Backup bền kiểm tra sau khi có gateway."""
+
+    del live
+    from shop_integration.content_overrides import OverrideStoreError, load_override_store
+
+    try:
+        store = load_override_store()
+    except OverrideStoreError as exc:
+        errors.append(str(exc))
+        return True
+    notes.append(f"Content override: {len(store.items)} mục, file đã đọc lại.")
+    if not settings.spreadsheet_id.strip():
+        return False
+    return False
+
+
+def _require_durable_backup(
+    settings: Settings,
+    gateway: Any,
+    notes: list[str],
+    errors: list[str],
+    *,
+    live: bool,
+) -> bool:
+    from shop_integration.menu_region_backup import durable_backup_required, store_region_backup
+
+    if not live or not durable_backup_required():
+        return False
+    try:
+        notes.append(
+            store_region_backup(
+                gateway,
+                settings.spreadsheet_id,
+                secrets=settings.secret_values(),
+            )
+        )
+    except Exception as exc:
+        errors.append(f"Backup bền chưa READY. Không ghi MENU. {exc}")
+        return True
+    return False
 
 
 def _load_shop_products(settings: Settings, shop_client: Any | None) -> tuple[list[Any], list[str]]:
