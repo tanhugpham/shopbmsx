@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "notes": "Chỉ trường trong locked_fields được giữ khi sync. Giá, tồn kho và bảo hành không khóa được. Không suy khóa từ khác biệt trên sheet.",
+  "items": []
+}

@@ -64,7 +64,7 @@ def normalize_text(value: object, *, multiline: bool = True) -> str:
 
 
 CONTACT_HANDLE = "@tiensky123"
-CONTACT_REPLACEMENT = "@admin"
+CONTACT_REPLACEMENT = "@tanhung929"
 _ZW = r"[\u200b\u200c\u200d\ufeff]*"
 _CONTACT_HANDLE = re.compile(
     rf"@{_ZW}t{_ZW}i{_ZW}e{_ZW}n{_ZW}s{_ZW}k{_ZW}y{_ZW}1{_ZW}2{_ZW}3(?![\w])",
@@ -73,7 +73,7 @@ _CONTACT_HANDLE = re.compile(
 
 
 def sanitize_public_text(value: object) -> object:
-    """Đổi @tiensky123 thành @admin. Giữ nguyên phần còn lại, emoji và tiếng Việt."""
+    """Đổi @tiensky123 thành @tanhung929. Giữ nguyên phần còn lại, emoji và tiếng Việt."""
 
     if not isinstance(value, str) or value == "":
         return value

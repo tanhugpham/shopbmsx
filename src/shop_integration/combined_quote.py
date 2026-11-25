@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Any, Protocol
 
+from shop_integration.content_overrides import OverrideStore, load_override_store
 from shop_integration.errors import ConfigError, MenuLayoutError, SheetLayoutError
 from shop_integration.menu_layout import (
     MenuCapacity,
@@ -235,9 +237,15 @@ class QuoteUpdate:
 
 
 def shop_quote_rows(
-    products: list[Product], policy: PricingPolicy | None = None
+    products: list[Product],
+    policy: PricingPolicy | None = None,
+    *,
+    overrides: OverrideStore | None = None,
 ) -> list[dict[str, Any]]:
-    """Mỗi biến thể có giá bán thành một dòng. ID 1..n. Không ghi local id API."""
+    """Mỗi biến thể có giá bán thành một dòng. ID 1..n. Không ghi local id API.
+
+    Khóa nội dung được đọc lại từ file mỗi lần gọi. Giá và tồn vẫn lấy từ API.
+    """
 
     rules = policy or PricingPolicy()
     rows: list[dict[str, Any]] = []
@@ -268,7 +276,8 @@ def shop_quote_rows(
                     variant_id=variant.id,
                 )
             )
-    return rows
+    store = overrides if overrides is not None else load_override_store()
+    return store.apply(rows)
 
 
 def nastele_quote_rows(
@@ -661,6 +670,14 @@ def plan_menu_cells(
         if row_number is None:
             row_number = _loose_match_menu_row(keys, region, by_region_name, by_name, used_rows, locked)
             loose_stock = row_number is not None
+        if row_number is None and not stock_column_only:
+            row_number = _match_renamed_menu_row(
+                str(item.get("PRODUCT") or ""),
+                grid,
+                regions,
+                used_rows,
+                locked,
+            )
         if row_number is None and stock_column_only:
             continue
         item_id = ""
@@ -846,7 +863,13 @@ def _existing_name_keys(row: list[Any]) -> set[str]:
 
 
 def _incoming_name_keys(row: dict[str, Any]) -> set[str]:
-    product = str(row.get("PRODUCT") or "").strip()
+    keys = _product_name_keys(row.get("PRODUCT"))
+    keys.update(_product_name_keys(row.get("source_product")))
+    return keys
+
+
+def _product_name_keys(value: object) -> set[str]:
+    product = str(value or "").strip()
     keys = {_fold_category(product)} if product else set()
     for separator in (" — ", " – "):
         if separator not in product:
@@ -943,6 +966,37 @@ def _best_loose_name(
     return best_row
 
 
+def _match_renamed_menu_row(
+    name: str,
+    grid: list[list[Any]],
+    regions: list[MenuRegion],
+    used_rows: set[int],
+    locked: set[int],
+) -> int | None:
+    """Khớp một lần đổi tên duy nhất, ví dụ 30d thành 24d, thay vì thêm dòng mới."""
+
+    wanted = _fold_category(name)
+    if len(wanted) < 8:
+        return None
+    scored: list[tuple[float, int]] = []
+    for region in regions:
+        for row_number in region.product_rows:
+            if row_number in used_rows or row_number in locked:
+                continue
+            if row_number - 1 >= len(grid):
+                continue
+            current = _fold_category(_at(grid[row_number - 1], 1))
+            if len(current) < 8:
+                continue
+            scored.append((SequenceMatcher(None, wanted, current).ratio(), row_number))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    if not scored or scored[0][0] < 0.9:
+        return None
+    if len(scored) > 1 and scored[1][0] > 0.7:
+        return None
+    return scored[0][1]
+
+
 def _stock_name_fits(menu_key: str, incoming_key: str) -> bool:
     if len(incoming_key) < 4 or not menu_key.startswith(incoming_key):
         return False
@@ -969,8 +1023,23 @@ def _append_menu_row_changes(
     if row_number in locked:
         return
     raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
+    wanted = _keep_unstated_warranty(raw, wanted)
     for column, value in enumerate(wanted[:MENU_COLUMNS]):
         _queue_menu_cell(cells, raw, row_number, column, value)
+
+
+def _keep_unstated_warranty(raw: list[Any], wanted: list[Any]) -> list[Any]:
+    """Nguồn không nêu bảo hành thì giữ ô WARRANTY hiện có. Không đụng cột J trở đi."""
+
+    adjusted = list(wanted)
+    column = MENU_HEADERS.index("WARRANTY")
+    if column >= len(adjusted):
+        return adjusted
+    incoming = str(adjusted[column] or "").strip()
+    existing = str(_at(raw, column) or "").strip()
+    if incoming == quote_warranty("") and existing and existing != incoming:
+        adjusted[column] = existing
+    return adjusted
 
 
 def _append_menu_stock_changes(

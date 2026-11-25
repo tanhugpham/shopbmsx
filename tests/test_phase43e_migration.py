@@ -624,6 +624,40 @@ def test_backup_blocks_when_required_tab_missing(tmp_path: Path) -> None:
     assert any("thiếu tab" in item.casefold() for item in readiness.blockers)
 
 
+def test_menu_plan_accepts_one_unique_duration_rename() -> None:
+    book = _book()
+    rows = [dict(row) for row in _source_rows()]
+    capcut = next(row for row in rows if row["PRODUCT"].startswith("Capcut Pro 30d"))
+    capcut["PRODUCT"] = "Capcut Pro 24d full Date - BHF"
+    capcut["PRICE"] = 38000
+    baseline = menu_baseline_from_structure(book.menu_structure, MENU_HEADERS)
+    plan = plan_menu_migration(
+        book.values[TAB_MENU],
+        baseline,
+        rows,
+        _manual_rows(),
+    )
+    assert plan.product_count_after == 24
+    assert plan.unique_ids_after == 24
+    assert plan.product_id == "local_41"
+
+
+def test_menu_plan_blocks_unrelated_rename() -> None:
+    book = _book()
+    rows = [dict(row) for row in _source_rows()]
+    capcut = next(row for row in rows if row["PRODUCT"].startswith("Capcut Pro 30d"))
+    capcut["PRODUCT"] = "Windows 11 Pro retail key"
+    capcut["PRICE"] = 38000
+    baseline = menu_baseline_from_structure(book.menu_structure, MENU_HEADERS)
+    with pytest.raises(MigrationBlocked, match="Capcut Pro 30d"):
+        plan_menu_migration(
+            book.values[TAB_MENU],
+            baseline,
+            rows,
+            _manual_rows(),
+        )
+
+
 def test_menu_plan_blocks_when_target_row_is_not_empty() -> None:
     book = _book()
     book.values[TAB_MENU][MENU_TARGET_ROW - 1] = [

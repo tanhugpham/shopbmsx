@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -352,6 +353,36 @@ def validate_source_identities(rows: Sequence[dict[str, Any]]) -> list[str]:
     return problems
 
 
+def _unique_rename_identity(
+    name: object,
+    candidates: Sequence[dict[str, Any]],
+) -> tuple[str, str] | None:
+    """Chấp nhận một lần đổi tên duy nhất khi giá đã đổi.
+
+    Chỉ dùng sau khi tên chính xác và tên+giá đều thất bại. Cặp tốt nhất phải
+    đạt 0,9 và cặp kế tiếp không được gần, để không ghép hai sản phẩm khác nhau.
+    """
+
+    wanted = normalize_product_name(name)
+    if not wanted:
+        return None
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for row in candidates:
+        api_name = normalize_product_name(row.get("PRODUCT"))
+        if not api_name:
+            continue
+        scored.append((SequenceMatcher(None, wanted, api_name).ratio(), row))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    if not scored or scored[0][0] < 0.9:
+        return None
+    if len(scored) > 1 and scored[1][0] > 0.7:
+        return None
+    identity = _identity(scored[0][1])
+    if not all(identity):
+        return None
+    return identity
+
+
 def resolve_source_identity(
     name: object,
     price: object,
@@ -671,16 +702,27 @@ def plan_menu_migration(
         if is_menu_product_row(grid[row_number - 1])
     ]
     current_by_identity: dict[tuple[str, str], int] = {}
+    pending: list[tuple[int, str]] = []
     for row_number in product_rows:
         raw = grid[row_number - 1]
         name, _misaligned = _product_name_for_menu_row(raw)
         identity = resolve_source_identity(name, _cell(raw, 5), shop_rows)
         if identity is None or not all(identity):
+            pending.append((row_number, name))
+            continue
+        current_by_identity.setdefault(identity, row_number)
+    unused_rows = [
+        row for row in shop_rows if _identity(row) not in current_by_identity
+    ]
+    for row_number, name in pending:
+        identity = _unique_rename_identity(name, unused_rows)
+        if identity is None or identity in current_by_identity:
             raise MigrationBlocked(
                 f"MENU dòng {row_number}: không xác định được ProductID/VariantID "
                 f"cho '{name}'. Không dựa vào tên để migration."
             )
-        current_by_identity.setdefault(identity, row_number)
+        current_by_identity[identity] = row_number
+        unused_rows = [row for row in unused_rows if _identity(row) != identity]
 
     current_target = grid[target_row - 1] if target_row - 1 < len(grid) else []
     already_target = all(
@@ -743,6 +785,7 @@ def plan_menu_migration(
     after[legacy_row - 1] = [""] * 8 + list(after[legacy_row - 1][8:])
     after_identities: set[tuple[str, str]] = set()
     after_ids: set[str] = set()
+    claimed: set[tuple[str, str]] = set()
     for row_number in range(header_row + 1, MENU_EXTENDED_LAST_ROW + 1):
         raw = after[row_number - 1]
         if not is_menu_product_row(raw):
@@ -750,9 +793,13 @@ def plan_menu_migration(
         name, _misaligned = _product_name_for_menu_row(raw)
         identity = resolve_source_identity(name, _cell(raw, 5), shop_rows)
         if identity is None or not all(identity):
+            unused_rows = [row for row in shop_rows if _identity(row) not in claimed]
+            identity = _unique_rename_identity(name, unused_rows)
+        if identity is None or not all(identity):
             raise MigrationBlocked(
                 f"Sau migration, MENU dòng {row_number} vẫn không có identity."
             )
+        claimed.add(identity)
         after_identities.add(identity)
         item_id = _text(raw, 0)
         if item_id:

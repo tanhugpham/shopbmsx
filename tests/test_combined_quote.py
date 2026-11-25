@@ -9,6 +9,7 @@ from shop_integration.cli import build_parser
 from shop_integration.combined_quote import (
     MENU_HEADERS,
     QUOTE_HEADERS,
+    SOURCE_SHOP,
     TAB_AUTO,
     TAB_COMBINED,
     TAB_MANUAL,
@@ -783,7 +784,7 @@ def test_menu_replaces_contact_handle_in_description() -> None:
         dry_run=False,
     )
     description = str(gateway.values[TAB_MENU][7][2])
-    assert "@admin" in description
+    assert "@tanhung929" in description
     assert "@tiensky123" not in description
     assert "Định dạng: Email | Mật khẩu | 2FA" in description
     assert gateway.values[TAB_MENU][7][5] == 203000
@@ -835,7 +836,7 @@ def test_menu_stock_and_status_follow_source() -> None:
     assert office_row["STOCK"] == 0
     assert office_row["STATUS"] == "SOLD OUT"
     assert "@tiensky123" not in str(office_row["DESCRIPTION"])
-    assert "@admin" in str(office_row["DESCRIPTION"])
+    assert "@tanhung929" in str(office_row["DESCRIPTION"])
 
 
 def test_existing_menu_description_is_sanitized_even_if_product_is_not_in_source() -> None:
@@ -849,7 +850,7 @@ def test_existing_menu_description_is_sanitized_even_if_product_is_not_in_source
     row = gateway.values[TAB_MENU][10]
     assert row[0] == "AI-01"
     assert row[1] == "Claude"
-    assert row[2] == "Inbox @admin và @tiensky1234."
+    assert row[2] == "Inbox @tanhung929 và @tiensky1234."
     assert gateway.values[TAB_MENU][6][0] == "🤖 SHOP XOÀI NON"
     assert gateway.values[TAB_MENU][9][0] == "🤖 AI ACCOUNTS"
 
@@ -1061,3 +1062,54 @@ def test_custom_hand_source_reaches_flat_menu() -> None:
     assert placed[7] == "IN STOCK"
     assert result.manual_count == 1
     assert gateway.values[TAB_MENU][6][6] == 2
+
+
+def test_unique_duration_rename_updates_the_same_menu_row() -> None:
+    grid = _menu_storefront()
+    grid[7] = [
+        "SXN-01",
+        "Capcut Pro 30d full Date - BHF",
+        "mô tả cũ",
+        "30 Ngày",
+        "BHF",
+        43000,
+        0,
+        "SOLD OUT",
+    ]
+    gateway = _menu_book(grid)
+    incoming = [
+        {
+            "ID": 1,
+            "Nguồn": SOURCE_SHOP,
+            "PRODUCT": "Capcut Pro 24d full Date - BHF",
+            "DESCRIPTION": "mô tả mới",
+            "DURATION": "24 Ngày",
+            "WARRANTY": "BHF",
+            "PRICE": 38000,
+            "STOCK": 5,
+        }
+    ]
+    first = CombinedQuoteWriter(gateway, "last-id").update(
+        incoming,
+        dry_run=False,
+        expire_missing=True,
+    )
+    row = gateway.values[TAB_MENU][7]
+    assert first.menu_count == 1
+    assert row[0] == "SXN-01"
+    assert row[1] == "Capcut Pro 24d full Date - BHF"
+    assert row[2] == "mô tả mới"
+    assert row[3] == "24 Ngày"
+    assert row[4] == "BHF"
+    assert row[5] == 38000
+    assert row[6] == 5
+    assert row[7] == "LOW STOCK"
+    assert sum(1 for item in gateway.values[TAB_MENU] if item and item[0] == "SXN-01") == 1
+    snapshot = list(row)
+    second = CombinedQuoteWriter(gateway, "last-id").update(
+        incoming,
+        dry_run=False,
+        expire_missing=True,
+    )
+    assert second.applied is True
+    assert gateway.values[TAB_MENU][7][:8] == snapshot[:8]

@@ -73,7 +73,7 @@ Hai nguồn xếp chồng. `ID` trên bảng này được đánh lại từ 1. 
 2. Đọc `NASTELEID`. Không ghi dữ liệu sản phẩm vào sheet này. Catalog API không được đổ vào đây.
 3. Cập nhật `MENU` bằng cách chép `PRODUCT`, `DESCRIPTION`, `DURATION`, `WARRANTY`, `PRICE`, `STOCK` từ hai sheet đó, rồi điền `STATUS`. Mã `SXN-01` / `NST-01` trên `MENU` không lấy từ cột `ID` của bảng con. `BAO_GIA_TONG_HOP` xếp chồng cùng hai nguồn.
 
-Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, `NASTELE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Chưa có vùng `NASTELE` thì dòng tay rơi vào vùng shop đang có. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@admin`.
+Tool chỉ ghi **giá trị** các ô sản phẩm cột A–H. Không ghi đè Category Header (`🤖 SHOP XOÀI NON`, `AI ACCOUNTS`, `WINDOWS LICENSE`, `NASTELE`, …), banner, header cột, Warranty Policy từ cột J, màu, border hay khổ cột. Sản phẩm mới được thêm vào hàng trống trong đúng vùng danh mục. Chưa có vùng `NASTELE` thì dòng tay rơi vào vùng shop đang có. Trước khi ghi, mọi `@tiensky123` trong Description được đổi thành `@tanhung929`.
 
 Từ Phase 4.3B, trước khi ghi MENU tool đọc cấu trúc thật: 62 vùng gộp, công thức, dropdown và khổ cột/dòng. Ô nằm trong vùng gộp hoặc có công thức bị từ chối; cột I–M bị từ chối; không gửi `batchUpdate` nào chạm MENU; không append dòng. Sản phẩm shop vượt số hàng trống của đúng danh mục thì dừng cả lượt ghi, không đè layout. Baseline và lệnh `menu-baseline` nằm ở [phase43b_single_spreadsheet.md](phase43b_single_spreadsheet.md#9-khóa-layout-menu-phase-43b).
 

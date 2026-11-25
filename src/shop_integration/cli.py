@@ -191,6 +191,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="In cấu hình hiệu lực, biến cũ bị bỏ qua và tab LEGACY. Không gọi mạng.",
     )
     config_check.set_defaults(func=command_config_check)
+
+    content_override = commands.add_parser(
+        "content-override",
+        help="Đọc hoặc ghi khóa nội dung bán hàng ra file local. Không ghi Google Sheets.",
+    )
+    content_override.add_argument("--path", default="", help="File JSON. Mặc định data/content_overrides.json.")
+    content_override.add_argument("--product-id", default="")
+    content_override.add_argument("--variant-id", default="")
+    content_override.add_argument("--lock", action="append", default=[])
+    content_override.add_argument("--unlock", action="append", default=[])
+    content_override.add_argument("--display-name", default=None)
+    content_override.add_argument("--display-description", default=None)
+    content_override.add_argument("--duration", default=None)
+    content_override.add_argument("--sales-content", default=None)
+    content_override.add_argument("--contact", default=None)
+    content_override.add_argument("--clear", action="store_true")
+    content_override.set_defaults(func=command_content_override)
     return parser
 
 
@@ -468,6 +485,52 @@ def command_sources(args: argparse.Namespace, settings: Settings) -> int:
 def command_sync_sources(args: argparse.Namespace, settings: Settings) -> int:
     del args
     return _source_command(settings, write_sheets=True)
+
+
+def command_content_override(args: argparse.Namespace, settings: Settings) -> int:
+    """Ghi khóa nội dung ra file. Không gọi API và không ghi Google."""
+
+    del settings
+    from shop_integration.content_overrides import load_override_store, save_override_store
+
+    path = Path(args.path) if args.path else None
+    store = load_override_store(path)
+    changing = bool(
+        args.clear
+        or args.product_id
+        or args.variant_id
+        or args.lock
+        or args.unlock
+        or args.display_name is not None
+        or args.display_description is not None
+        or args.duration is not None
+        or args.sales_content is not None
+        or args.contact is not None
+    )
+    if changing:
+        store.upsert(
+            args.product_id,
+            args.variant_id,
+            lock=args.lock,
+            unlock=args.unlock,
+            values={
+                "display_name": args.display_name,
+                "display_description": args.display_description,
+                "duration": args.duration,
+                "sales_content": args.sales_content,
+                "contact": args.contact,
+            },
+            clear=args.clear,
+        )
+        target = save_override_store(store, path)
+        print(f"Đã lưu content override: {target}")
+    else:
+        print(f"Content override: {store.path or 'chưa có file'}")
+    print(f"Số khóa: {len(store.items)}")
+    for (product_id, variant_id), override in sorted(store.items.items()):
+        locked = ",".join(sorted(override.locked_fields)) or "(không khóa)"
+        print(f"- {product_id}/{variant_id}: {locked}")
+    return 0
 
 
 def command_sync_menu(args: argparse.Namespace, settings: Settings) -> int:

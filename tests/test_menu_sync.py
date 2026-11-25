@@ -53,7 +53,7 @@ def test_shop_error_sanitizes_existing_menu_and_keeps_headers() -> None:
     assert menu[6][0] == "🤖 SHOP XOÀI NON"
     assert menu[9][0] == "🤖 AI ACCOUNTS"
     assert menu[10][0] == "AI-01"
-    assert menu[10][2] == "Inbox admin @admin để nhận mã."
+    assert menu[10][2] == "Inbox admin @tanhung929 để nhận mã."
     assert menu[10][6] == 1
     assert menu[10][7] == "IN STOCK"
     assert result.leftover_handles == 0
