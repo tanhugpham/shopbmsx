@@ -72,3 +72,5 @@ Phase 4.3B — một spreadsheet, cấu hình sạch, tab LEGACY: [docs/phase43b
 Khóa layout MENU (A–H, merge, công thức, dropdown, J–M): mục 9 của [docs/phase43b_single_spreadsheet.md](docs/phase43b_single_spreadsheet.md#9-khóa-layout-menu-phase-43b).
 
 Phase 4.3F — catalog hai tầng, adapter nhiều nhà cung cấp và MENU khách an toàn: [docs/phase43f_multi_supplier.md](docs/phase43f_multi_supplier.md).
+
+Phase 4.3H — audit cuối, plan migration mới từ snapshot tươi và readiness auto-sync: [docs/phase43h_final_migration_readiness.md](docs/phase43h_final_migration_readiness.md).

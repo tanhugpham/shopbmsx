@@ -1,5 +1,11 @@
 # Phase 4.3E — Migration dữ liệu nguồn và MENU (chỉ lập kế hoạch)
 
+> **Đã được thay thế bởi Phase 4.3H.** Plan 11:56/12:35 và source SHA trong tài liệu này
+> không còn dùng để apply. Plan mới được lập từ snapshot 2026-11-25T13:54:41+07:00,
+> 8 thao tác, 135 ô lệch. Xem
+> [phase43h_final_migration_readiness.md](phase43h_final_migration_readiness.md).
+> Không dùng `scripts/phase43e_live_migration.py` cho plan mới.
+
 Lượt này **không ghi Google Sheets/Docs**. `DRY_RUN=true`, không tạo đơn, không push
 GitHub, không deploy Render, không bật scheduler. Toàn bộ kết quả dưới đây là kế hoạch
 đã được kiểm tra bằng code và audit trực tiếp qua Google Sheets API (chỉ đọc).

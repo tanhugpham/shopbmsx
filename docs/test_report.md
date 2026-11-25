@@ -15,6 +15,9 @@ python -m pytest --tb=short
 
 Kết quả lần chạy sau cùng: **309 passed, 0 failed** (Phase 4.3F). Suite gồm test Phase 4.1, nhiều nhà cung cấp, Phase 4.2.1 cho catalog rỗng, 16 test Phase 4.3B cho một spreadsheet duy nhất, 14 test Phase 4.3D cho vùng MENU A31:H35, 17 test Phase 4.3E cho migration nguồn/MENU, 23 test Phase 4.3F cho catalog hai tầng và MENU khách, cùng test scheduler chỉ ghi khi opt-in.
 
+Phase 4.3H chạy lại toàn bộ suite: **309 passed, 0 failed, 0 skipped** trong 6.553 giây;
+JUnit local `backups/phase43h/pytest.xml`. Không thêm test mới trong lượt chỉ đọc này.
+
 Không có test nào bị bỏ qua. Không có test nào ghi đè kết quả mạng bằng dữ liệu giả và gọi đó là thành công ngoài đời.
 
 ## Phạm vi đã kiểm tra bằng mock

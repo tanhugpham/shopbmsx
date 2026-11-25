@@ -166,6 +166,10 @@ Kết luận: **có thể tái sử dụng, chưa cần đổi migration**. Lý 
 Phase 4.3E vẫn đang dừng vì source fingerprint drift. Không có live write trong
 lượt này. Muốn apply phải tạo plan v3 từ nguồn hiện tại và được phê duyệt lại.
 
+Phase 4.3H đã tạo plan v3 từ snapshot 2026-11-25T13:54:41+07:00 (8 thao tác,
+135 ô lệch, backup READY) nhưng **chưa apply**. Xem
+[phase43h_final_migration_readiness.md](phase43h_final_migration_readiness.md).
+
 ## 7. Kết quả kiểm thử
 
 File mới: `tests/test_catalog_multi_supplier.py` — 23 ca, bao phủ:
