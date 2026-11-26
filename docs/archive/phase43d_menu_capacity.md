@@ -187,7 +187,7 @@ Nguyên tắc:
   lệch. Lệch thật (công thức/merge/bảo vệ khác) vẫn bị chặn.
 
 Cờ môi trường: `MENU_AUTO_EXPAND` (mặc định `true`), `MENU_EXPAND_STEP` (1–50),
-`MENU_EXPAND_MAX_ROWS` (1–200). Xem [setup_vi.md](setup_vi.md).
+`MENU_EXPAND_MAX_ROWS` (1–200). Xem [../setup_vi.md](../setup_vi.md).
 
 Sau lần mở rộng thật đầu tiên, baseline cũ vẫn dùng được: preflight và
 `_menu_layout_guard` nhận ra phép dịch dòng và chỉ ghi chú. Muốn chốt mốc mới thì

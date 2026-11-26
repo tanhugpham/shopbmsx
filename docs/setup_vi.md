@@ -4,10 +4,11 @@ Tài liệu này dành cho người vận hành trên Windows PowerShell.
 
 ## 1. Môi trường Python
 
-Cần Python 3.11 trở lên. Thư mục dự án là `shopxoainon-integration`.
+Cần Python 3.11 trở lên. Repo dùng tên `shopbmsx`; Render pin Python `3.13.7`
+qua `.python-version` và biến `PYTHON_VERSION`.
 
 ```powershell
-cd shopxoainon-integration
+cd shopbmsx
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -51,8 +52,19 @@ Copy-Item .env.example .env
 | `PREFERRED_SUPPLIER_ID` | `shop_xoai_non` hoặc `nastele`. Dùng khi hai nguồn cùng giá. Mặc định `shop_xoai_non`. |
 | `COMPARISON_QUANTITY` | Số lượng dùng để so giá. Mặc định `1`, nên không lấy giá sỉ của bậc 10 hay 25. |
 | `NASTELE_RATE_LIMIT_PER_MINUTE` | Từ 1 đến 60. Trần tài liệu là 60 request mỗi phút cho mỗi key. |
+| `ENABLE_SCHEDULED_SYNC` | Giữ `false`. Thread sync trong tiến trình web; GitHub Actions là scheduler duy nhất. |
+| `ENABLE_SCHEDULED_MENU_LIVE` | Giữ `false`. Mọi lời gọi `/sync-menu` trên Render chỉ dry-run. |
+| `SCHEDULED_SYNC_SECONDS` | Chu kỳ thread khi được bật, mặc định `300`. Không dùng khi scheduler tắt. |
+| `MENU_BASELINE_FILE` | File baseline để so cấu trúc MENU trước khi ghi. Workflow đặt `data/menu-baseline.json`. |
+| `MENU_REQUIRE_DURABLE_BACKUP` | `true` trên GitHub Actions: bắt buộc snapshot tab `_MENU_SYNC_BACKUP` trước khi ghi MENU. |
+| `PRICING_RATE_LOW`, `PRICING_RATE_HIGH` | Tỷ lệ lợi nhuận dưới 100000 và trên 200000, mặc định `0.30`. |
+| `PRICING_MIDDLE_MIN`, `PRICING_MIDDLE_MAX` | Khoảng áp mức lợi nhuận cố định, mặc định `100000`–`200000`. |
+| `PRICING_MIDDLE_PROFIT` | Lợi nhuận cố định trong khoảng giữa, mặc định `35000`, chỉ nhận 30000–40000. |
+| `SYNC_TOKEN` | Chỉ dùng trên Render: token cho `/sync-*` qua header `X-Sync-Token`. |
+| `GOOGLE_CREDENTIALS_JSON` | Chỉ dùng trên Render/GitHub Actions: nội dung JSON service account, ghi ra file lúc khởi động. |
 
-Không dán API key hay JSON service account vào mã nguồn, test, Google Sheets, Google Docs, ảnh chụp hoặc Git.
+Không dán API key hay JSON service account vào mã nguồn, test, Google Sheets, Google
+Docs, ảnh chụp hoặc Git.
 
 ## 3. Google Cloud
 
@@ -164,7 +176,7 @@ PRICING_MIDDLE_PROFIT=35000
 
 Báo cáo Google Docs nằm trong một vùng có dấu `SHOP_XOAI_NON_BAO_CAO_BEGIN` và `SHOP_XOAI_NON_BAO_CAO_END`. Lần chạy sau thay vùng đó. Nội dung ngoài hai dấu không bị ghi đè. Nếu chỉ thấy một dấu, lệnh dừng và không sửa document.
 
-## 7. Một file Google cho catalog và báo giá
+## 8. Một file Google cho catalog và báo giá
 
 Phase 4.3B dùng **một** spreadsheet `GOOGLE_SPREADSHEET_ID` cho catalog, nguồn, MENU và báo giá. Không copy dòng từ tab catalog sang tab khách.
 
@@ -181,13 +193,14 @@ Phase 4.3B dùng **một** spreadsheet `GOOGLE_SPREADSHEET_ID` cho catalog, ngu�
 | 1 | tên khách thấy | mô tả tay | thời hạn | bảo hành | giá đã gõ | số lượng |
 | 1 | tên shop đã ghép biến thể | `description` | suy ra từ tên | suy ra từ tên | giá đã làm tròn đẹp | số lượng API |
 
-Không đặt `Giá gốc` hay `Product ID` vào file này. Bảng đầy đủ: [bao_gia_tong_hop.md](bao_gia_tong_hop.md).
+Không đặt `Giá gốc` hay `Product ID` vào file này. Hợp đồng cột đầy đủ:
+[architecture.md](architecture.md#4-hợp-đồng-cột-báo-giá).
 
 ```powershell
 python -m shop_integration quote-layout
 ```
 
-## 8. Báo giá API
+## 9. Báo giá API
 
 Báo giá không nằm trong đồng bộ định kỳ.
 
@@ -197,7 +210,7 @@ python -m shop_integration quote --product-id local_81 --variant-id local_81 --q
 
 Lệnh này gọi `POST /products/{id}/quote`. Nó không tạo đơn và không trừ ví. Request báo giá không được thử lại tự động.
 
-## 9. Kiểm thử tự động
+## 10. Kiểm thử tự động
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -206,11 +219,85 @@ python -m pytest
 
 Test dùng HTTP giả lập và gateway Google trong bộ nhớ. Chúng không cần API key thật và không gọi mạng Shop Xoài Non hay Google.
 
-## 10. Render miễn phí
+## 11. Triển khai Render và GitHub Actions
 
-Cron Render cần thẻ. Dùng **New → Web Service**, instance **Free**. Start command: `PYTHONPATH=src python scripts/start_web.py`. Lịch chạy dùng GitHub Actions. Bảng bấm từng bước: [render_free.md](render_free.md).
+### 11.1 Render Web Service (miễn phí, không thẻ)
 
-## 11. Khi gặp lỗi
+Cron trên Render cần gói trả phí, nên repo chỉ dùng **Web Service**. Lịch ghi MENU
+do GitHub Actions đảm nhiệm.
+
+1. https://dashboard.render.com → **New → Web Service** → chọn repo
+   `tanhugpham/shopbmsx`, nhánh `main`.
+2. Điền: Name `shopxoainon-web`, Region Singapore, Runtime Python,
+   **Instance type Free**.
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `PYTHONPATH=src python scripts/start_web.py`
+   - Health Check Path: `/health`
+3. Thêm biến môi trường:
+
+| Key | Value |
+| --- | --- |
+| `PYTHONPATH` | `src` |
+| `PYTHON_VERSION` | `3.13.7` |
+| `DRY_RUN` | `true` |
+| `ENABLE_SCHEDULED_SYNC` | `false` |
+| `ENABLE_SCHEDULED_MENU_LIVE` | `false` |
+| `ENABLE_PURCHASE` | `false` |
+| `ENABLE_TELEGRAM` | `false` |
+| `SHOP_XOAI_NON_BASE_URL` | `https://shopxoainon.online/api/v1` |
+| `NASTELE_BASE_URL` | `https://nastele.online` |
+| `GOOGLE_CREDENTIALS_FILE` | `./GOOGLE_CREDENTIALS_FILE.json` |
+| `SHOP_XOAI_NON_API_KEY`, `NASTELE_API_KEY` | key thật (secret) |
+| `GOOGLE_SPREADSHEET_ID`, `GOOGLE_DOCUMENT_ID` | ID file đã chia sẻ |
+| `GOOGLE_CREDENTIALS_JSON` | nguyên JSON service account |
+| `SYNC_TOKEN` | chuỗi bí mật dài 20+ ký tự |
+
+4. Mở `https://<service>.onrender.com/health`: JSON phải có `"status": "ok"` và
+   `"dry_run": true`. Free sẽ ngủ sau ~15 phút, lần đầu có thể chờ ~1 phút.
+
+Gọi tay (vẫn dry-run, không ghi Google):
+
+```powershell
+$env:TOKEN = "SYNC_TOKEN_BAN_DAT"
+Invoke-WebRequest -Uri "https://<service>.onrender.com/sync-sources" -Method POST `
+  -Headers @{ "X-Sync-Token" = $env:TOKEN }
+```
+
+Không có token → HTTP 403. Render **không** ghi MENU: `ENABLE_SCHEDULED_SYNC=false`,
+`ENABLE_SCHEDULED_MENU_LIVE=false`, và `DRY_RUN=true` bị khóa trong mã.
+
+### 11.2 GitHub Actions
+
+Repo → **Settings → Secrets and variables → Actions**, thêm:
+
+| Secret | Dùng cho |
+| --- | --- |
+| `SHOP_XOAI_NON_API_KEY` | `sync-menu`, `sync-sources` |
+| `GOOGLE_SPREADSHEET_ID` | `sync-menu`, `sync-sources` |
+| `GOOGLE_CREDENTIALS_JSON` | ghi file credentials trên runner |
+| `NASTELE_API_KEY` | `sync-sources` (tùy chọn) |
+| `GOOGLE_DOCUMENT_ID` | báo cáo Docs (tùy chọn) |
+
+| Workflow | Lịch | Ghi Google |
+| --- | --- | --- |
+| `sync-menu.yml` | cron `*/5 * * * *` (thực tế trễ hơn), có `workflow_dispatch` | Có: preflight → backup bền → `DRY_RUN=false` |
+| `sync-sources.yml` | `17 1 * * *` UTC | Không: luôn `DRY_RUN=true` |
+| `ci.yml` | mỗi push/PR | Không: chỉ `pytest` |
+
+Push lên `main` chỉ deploy khi check `ci` đạt (`autoDeployTrigger: checksPass`).
+
+### 11.3 Điều không làm
+
+- Không bấm **New → Blueprint** nếu nó đòi Cron/Starter/thẻ.
+- Không chọn instance **Starter**, không bật Cron Render.
+- Không tắt `DRY_RUN` trên Render, không đặt `ENABLE_SCHEDULED_*` thành `true`.
+- Không dùng `setInterval` trình duyệt hoặc ping liên tục để giả Cron.
+
+Chi tiết vận hành, backup và khôi phục: [operations.md](operations.md).
+
+## 12. Khi gặp lỗi
+
+Bảng đầy đủ theo triệu chứng: [operations.md](operations.md#7-sự-cố-thường-gặp).
 
 | Thông báo | Việc cần làm |
 | --- | --- |

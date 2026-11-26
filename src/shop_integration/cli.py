@@ -157,7 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     menu_migrate.add_argument(
         "--baseline",
-        default="backups/menu-baseline-phase43b.json",
+        default="data/menu-baseline.json",
         help="Baseline MENU chính thức để so sánh trước khi migration.",
     )
     menu_migrate.add_argument(
