@@ -16,6 +16,7 @@ from shop_integration.api_client import ShopApiClient
 from shop_integration.combined_quote import (
     MENU_HEADERS,
     TAB_MANUAL,
+    TAB_MENU,
     CombinedQuoteWriter,
     manual_quote_rows,
     shop_quote_rows,
@@ -31,10 +32,16 @@ from shop_integration.menu_expand import (
 )
 from shop_integration.menu_layout import (
     LayoutLockedGateway,
+    MenuCapacity,
     MenuLayoutGuard,
     load_menu_baseline,
     menu_structure_diff,
     read_menu_baseline,
+)
+from shop_integration.menu_order import (
+    apply_menu_order,
+    may_group_similar,
+    plan_menu_order,
 )
 from shop_integration.pricing import policy_from_settings
 from shop_integration.product_service import ProductService
@@ -277,6 +284,13 @@ def _run_menu_sync(
                     tabs=("SAN_PHAM", "BIEN_THE", "BAO_GIA", "BAO_GIA_TONG_HOP"),
                 )
                 cells_written += extra_cells
+                cells_written += _group_similar_menu_rows(
+                    guarded,
+                    spreadsheet_id,
+                    live=live,
+                    notes=notes,
+                    errors=errors,
+                )
             except Exception as exc:
                 errors.append(f"Ghi MENU lỗi: {exc}")
         if own_gateway:
@@ -490,6 +504,67 @@ def _expand_menu_capacity(
             plan.zone_rows_before,
         )
     return plan
+
+
+def _group_similar_menu_rows(
+    gateway: Any,
+    spreadsheet_id: str,
+    *,
+    live: bool,
+    notes: list[str],
+    errors: list[str],
+) -> int:
+    """Gom sản phẩm cùng loại về cạnh nhau. Chỉ đổi chỗ dòng A:H, không đổi dữ liệu."""
+
+    if not may_group_similar():
+        notes.append("Bỏ gom cụm sản phẩm cùng loại vì MENU_GROUP_SIMILAR=false.")
+        return 0
+    try:
+        baseline = read_menu_baseline(gateway, spreadsheet_id, MENU_HEADERS)
+    except MenuLayoutError as exc:
+        notes.append(f"Chưa gom cụm được vì chưa đọc được cấu trúc MENU: {exc}")
+        return 0
+    except Exception as exc:  # gateway lỗi tạm thời thì bỏ qua, không chặn sync
+        notes.append(
+            f"Chưa gom cụm được vì lỗi đọc cấu trúc MENU ({type(exc).__name__})."
+        )
+        return 0
+    capacity = MenuCapacity.from_baseline(baseline)
+    try:
+        grid = gateway.get_values(spreadsheet_id, f"'{TAB_MENU}'!A1:H")
+    except Exception as exc:
+        notes.append(
+            f"Chưa gom cụm được vì không đọc được A:H của MENU ({type(exc).__name__})."
+        )
+        return 0
+    if not grid:
+        notes.append("Chưa gom cụm được vì MENU chưa có dữ liệu.")
+        return 0
+    plan = plan_menu_order(grid, capacity=capacity)
+    notes.extend(plan.notes)
+    if plan.identity:
+        notes.append(plan.summary())
+        return 0
+    if not live:
+        notes.append(f"Chạy thử chưa ghi: {plan.summary()}")
+        return 0
+    try:
+        written = apply_menu_order(gateway, spreadsheet_id, plan, grid=grid)
+    except MenuLayoutError as exc:
+        errors.append(str(exc))
+        return 0
+    except Exception as exc:
+        errors.append(f"Gom cụm sản phẩm cùng loại lỗi: {exc}")
+        return 0
+    notes.append(plan.summary())
+    logger.info(
+        "MENU group products rows=%s moved=%s clusters=%s cells=%s",
+        plan.size,
+        plan.moved,
+        len(plan.clusters),
+        written,
+    )
+    return written
 
 
 def _sanitize_description_tabs(
