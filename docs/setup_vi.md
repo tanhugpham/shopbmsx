@@ -44,6 +44,7 @@ Copy-Item .env.example .env
 | `MENU_AUTO_EXPAND` | Mặc định `true`: MENU tự chèn thêm dòng khi nguồn có nhiều sản phẩm hơn vùng chọn `K`. `false` để giữ nguyên layout và chỉ ghi cảnh báo. |
 | `MENU_EXPAND_STEP` | Số dòng chèn mỗi lần, 1–50, mặc định `10`. |
 | `MENU_EXPAND_MAX_ROWS` | Trần số dòng chèn trong một lượt sync, 1–200, mặc định `40`. Thiếu hơn thì lượt sau chèn tiếp. |
+| `MENU_GROUP_SIMILAR` | Mặc định `true`: gom sản phẩm cùng loại (ChatGPT, Canva, Google Drive, ...) về cạnh nhau trên MENU. Chỉ đổi thứ tự dòng A:H, không sửa dữ liệu, không ghi J:M. `false` để giữ nguyên thứ tự như nguồn trả về. |
 | `REQUEST_TIMEOUT_SECONDS` | Thời gian chờ mỗi request. Mặc định 30 giây. |
 | `NASTELE_BASE_URL` | Mặc định `https://nastele.online`. Phải dùng HTTPS. |
 | `NASTELE_API_KEY` | Key Nastele, gửi trong header `X-API-Key`. Để trống nếu chưa có. Không ghi vào Git. |
