@@ -353,6 +353,191 @@ def test_24th_product_uses_row_31_when_selector_is_expanded() -> None:
 
 
 
+def _compact_grid(*, retired_row: int = 9, retired_stock: int = 0) -> list[list[Any]]:
+    """MENU tối giản: dòng 8 còn bán, dòng ``retired_row`` đã ngừng bán, còn lại trống."""
+
+    grid = [_blank_row() for _ in range(40)]
+    grid[5] = list(MENU_HEADERS) + ["", "📋 CÁC GÓI BẢO HÀNH"]
+    grid[7] = [
+        "SXN-01",
+        "Sản phẩm còn bán",
+        "Mô tả",
+        "1 Tháng",
+        "BHF",
+        100000,
+        5,
+        "IN STOCK",
+        "",
+        "",
+        "",
+        "",
+        "",
+    ]
+    grid[retired_row - 1] = [
+        "SXN-02",
+        "Sản phẩm đã ngừng bán",
+        "Mô tả cũ",
+        "1 Tháng",
+        "KBH",
+        4000,
+        retired_stock,
+        "SOLD OUT",
+        "",
+        "",
+        "",
+        "",
+        "",
+    ]
+    return grid
+
+
+def _new_source_rows(names: list[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "ID": index,
+            "Nguồn": SOURCE_SHOP,
+            "PRODUCT": name,
+            "DESCRIPTION": "Mô tả",
+            "DURATION": "1 Tháng",
+            "WARRANTY": "KBH",
+            "PRICE": 30000,
+            "STOCK": 3,
+            "ProductID": f"local_new_{index}",
+            "VariantID": f"local_new_{index}",
+        }
+        for index, name in enumerate(names, start=1)
+    ]
+
+
+def _touched_rows(cells: list[tuple[str, Any]]) -> list[int]:
+    return sorted({int(range_a1.rsplit("!", 1)[1][1:]) for range_a1, _value in cells})
+
+
+def test_new_product_reuses_retired_row_inside_selector_window() -> None:
+    """Hết hàng trống trong vùng K38 thì dùng lại dòng đã ngừng bán, không ghi ra ngoài."""
+
+    grid = _compact_grid()
+    capacity = _capacity(grid=grid, selector_end=10)
+    assert capacity.selector_max_row == 10
+    assert capacity.last_writable_row == 36
+
+    cells, placed, notes = plan_menu_cells(
+        grid,
+        _new_source_rows(["Gói mới A", "Gói mới B"]),
+        [],
+        5,
+        strict_capacity=True,
+        capacity=capacity,
+    )
+
+    assert placed == 2
+    assert _touched_rows(cells) == [9, 10]
+    assert any("Dùng lại dòng 9" in note for note in notes)
+    assert not any(row > capacity.selector_max_row for row in _touched_rows(cells))
+
+
+def test_sold_out_row_still_in_stock_is_not_reused() -> None:
+    """Dòng SOLD OUT nhưng còn STOCK là dòng đang bán, không được đè."""
+
+    grid = _compact_grid(retired_stock=9)
+    capacity = _capacity(grid=grid, selector_end=8)
+    with pytest.raises(MenuLayoutError) as caught:
+        plan_menu_cells(
+            grid,
+            _new_source_rows(["Gói mới A", "Gói mới B"]),
+            [],
+            5,
+            strict_capacity=True,
+            capacity=capacity,
+        )
+    message = str(caught.value)
+    assert "dòng 10" in message
+    assert "K38" in message
+
+
+def test_retired_row_outside_selector_is_not_reused() -> None:
+    grid = _compact_grid(retired_row=20)
+    capacity = _capacity(grid=grid, selector_end=8)
+    with pytest.raises(MenuLayoutError) as caught:
+        plan_menu_cells(
+            grid,
+            _new_source_rows(["Gói mới A"]),
+            [],
+            5,
+            strict_capacity=True,
+            capacity=capacity,
+        )
+    message = str(caught.value)
+    assert "dòng 9" in message
+    assert "K38" in message
+
+
+def _truncated_grid() -> list[list[Any]]:
+    """27 sản phẩm ở dòng 8–34, không kèm dòng trống cuối như ``'MENU'!A1:ZZ``."""
+
+    grid = [_blank_row() for _ in range(34)]
+    grid[5] = list(MENU_HEADERS) + ["", "📋 CÁC GÓI BẢO HÀNH"]
+    for offset in range(27):
+        grid[7 + offset] = [
+            f"SXN-{offset + 1:02d}",
+            f"Sản phẩm {offset + 1}",
+            "Mô tả",
+            "1 Tháng",
+            "BHF",
+            100000 + offset,
+            5,
+            "IN STOCK",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ]
+    return grid
+
+
+def test_truncated_read_still_plans_product_into_last_blank_row() -> None:
+    """Dòng trống 35 bị reader cắt mất vẫn phải dùng được cho sản phẩm mới."""
+
+    grid = _truncated_grid()
+    capacity = _capacity(grid=grid, selector_end=35)
+    assert capacity.last_writable_row == 36
+    assert len(grid) < capacity.last_writable_row
+
+    names = [f"Sản phẩm {index}" for index in range(1, 27)]
+    cells, placed, _notes = plan_menu_cells(
+        grid,
+        _new_source_rows([*names, "Gói mới A"]),
+        [],
+        5,
+        strict_capacity=True,
+        capacity=capacity,
+    )
+
+    assert placed == 27
+    rows = _touched_rows(cells)
+    assert 35 in rows
+    assert max(rows) == 35
+
+
+def test_writer_guard_accepts_blank_row_inside_capacity() -> None:
+    grid = _truncated_grid()
+    structure = _structure(grid=grid, selector_end=35)
+    book = StructuredBook(
+        [TAB_MENU, "NASTELEID", "BAO_GIA", "BAO_GIA_TONG_HOP"],
+        {TAB_MENU: [list(row) for row in grid], "NASTELEID": [list(QUOTE_HEADERS)]},
+        structure,
+    )
+
+    guard, capacity = CombinedQuoteWriter(book, "last-id")._menu_safety(grid)
+
+    assert capacity is not None
+    assert capacity.last_writable_row == 36
+    guard.check_cell("'MENU'!B35")
+    with pytest.raises(MenuLayoutError):
+        guard.check_cell("'MENU'!B37")
+
+
 def test_legacy_sxn24_is_quarantined_and_mapped_by_product_id() -> None:
     capacity = _capacity()
     report = audit_menu_grid(_live_grid(), 6, capacity, _source_rows())

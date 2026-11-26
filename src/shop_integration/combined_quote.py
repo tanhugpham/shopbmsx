@@ -666,6 +666,29 @@ def _keep_operator_terms(
     return row
 
 
+def _menu_grid_with_capacity(
+    grid: list[list[Any]],
+    capacity: MenuCapacity | None,
+) -> list[list[Any]]:
+    """Bù dòng trống cuối vùng A:H khi ảnh chụp sheet dừng ở ô cuối có giá trị.
+
+    ``'MENU'!A1:ZZ`` chỉ trả tới dòng cuối cùng có dữ liệu, nên các dòng trống nằm
+    dưới sản phẩm cuối nhưng vẫn trước panel J:M bị ẩn khỏi planner. Không bù thì
+    sản phẩm mới bị báo "không còn hàng trống" dù sheet vẫn còn chỗ trong vùng
+    chọn K38. Chỉ bù tới ``capacity.last_writable_row``, không chạm panel.
+    """
+
+    if capacity is None or capacity.last_writable_row is None:
+        return grid
+    limit = capacity.last_writable_row
+    if len(grid) >= limit:
+        return grid
+    padded = [list(row) for row in grid]
+    while len(padded) < limit:
+        padded.append([""] * MENU_COLUMNS)
+    return padded
+
+
 def plan_menu_cells(
     grid: list[list[Any]],
     shop_rows: list[dict[str, Any]],
@@ -684,6 +707,7 @@ def plan_menu_cells(
     capacity giới hạn A:H trước panel J:M và kiểm tra vùng chọn K38/J39/J40.
     """
 
+    grid = _menu_grid_with_capacity(grid, capacity)
     regions = parse_menu_regions(grid, header_index, capacity=capacity)
     locked = _locked_menu_rows(grid, header_index, regions, capacity=capacity)
     allocated = _allocated_menu_ids(grid)
@@ -735,9 +759,20 @@ def plan_menu_cells(
             notes.append(f"Bỏ qua '{name}' vì chưa có vùng danh mục phù hợp.")
             continue
         else:
-            row_number = _next_region_slot(region, used_rows, locked)
+            name = str(item.get("PRODUCT") or "").strip() or "?"
+            reused = False
+            row_number = _next_region_slot(region, used_rows, locked, capacity=capacity)
             if row_number is None:
-                name = str(item.get("PRODUCT") or "").strip() or "?"
+                row_number = _retired_menu_slot(region, grid, used_rows, locked, capacity)
+                reused = row_number is not None
+            if row_number is None:
+                uncovered = _next_region_slot(region, used_rows, locked)
+                if uncovered is not None and capacity is not None:
+                    message = _selector_not_wired_message(capacity, uncovered, name, region)
+                    if strict_item:
+                        raise MenuLayoutError(message)
+                    notes.append(message)
+                    continue
                 if strict_item:
                     raise MenuLayoutError(
                         f"Vùng '{region.title or region.key}' trên MENU không còn hàng "
@@ -749,12 +784,17 @@ def plan_menu_cells(
                 )
                 continue
             if capacity is not None and not capacity.selector_covers(row_number):
-                name = str(item.get("PRODUCT") or "").strip() or "?"
                 message = _selector_not_wired_message(capacity, row_number, name, region)
                 if strict_item:
                     raise MenuLayoutError(message)
                 notes.append(message)
                 continue
+            if reused:
+                span = capacity.selector_span if capacity is not None else ""
+                notes.append(
+                    f"Dùng lại dòng {row_number} của sản phẩm đã ngừng bán cho '{name}'"
+                    + (f" để giữ trong vùng chọn {span} của K38." if span else ".")
+                )
             item_id = _next_menu_id(region.prefix, allocated)
         if not item_id:
             item_id = _next_menu_id(region.prefix if region else "SXN", allocated)
@@ -1047,10 +1087,55 @@ def _stock_name_fits(menu_key: str, incoming_key: str) -> bool:
     return bool(rest) and rest[0] in "(|["
 
 
-def _next_region_slot(region: MenuRegion, used_rows: set[int], locked: set[int]) -> int | None:
+def _next_region_slot(
+    region: MenuRegion,
+    used_rows: set[int],
+    locked: set[int],
+    *,
+    capacity: MenuCapacity | None = None,
+) -> int | None:
+    """Hàng trống đầu tiên còn dùng được, chỉ trong vùng K38/J39/J40 đọc tới."""
+
     for row_number in region.empty_rows:
-        if row_number not in used_rows and row_number not in locked:
-            return row_number
+        if row_number in used_rows or row_number in locked:
+            continue
+        if capacity is not None and not capacity.selector_covers(row_number):
+            continue
+        return row_number
+    return None
+
+
+def _retired_menu_slot(
+    region: MenuRegion,
+    grid: list[list[Any]],
+    used_rows: set[int],
+    locked: set[int],
+    capacity: MenuCapacity | None,
+) -> int | None:
+    """Dòng sản phẩm đã ngừng bán dùng lại được cho sản phẩm mới.
+
+    Chỉ nhận dòng đã SOLD OUT và STOCK 0 (đã kiệt từ lần đồng bộ trước) nằm trong
+    vùng chọn K38, để sản phẩm mới không bị ghi ra ngoài vùng chọn và không đè
+    lên dòng còn hàng.
+    """
+
+    for row_number in region.product_rows:
+        if row_number in used_rows or row_number in locked:
+            continue
+        if capacity is not None:
+            if not capacity.selector_covers(row_number):
+                continue
+            if any(capacity.cell_blocked(column, row_number) for column in range(MENU_COLUMNS)):
+                continue
+        raw = grid[row_number - 1] if row_number - 1 < len(grid) else []
+        if not is_menu_product_row(raw):
+            continue
+        if str(_at(raw, MENU_STATUS_COLUMN) or "").strip().upper() != "SOLD OUT":
+            continue
+        stock = _number(_at(raw, MENU_STOCK_COLUMN))
+        if stock is not None and stock > 0:
+            continue
+        return row_number
     return None
 
 
@@ -1733,9 +1818,6 @@ class CombinedQuoteWriter:
         """Guard A–H và vùng capacity đọc từ cùng một baseline, không đọc hai lần."""
 
         meta = self.gateway.list_sheet_meta(self.spreadsheet_id)
-        guard = menu_guard_from_sheet_meta(meta, max_row=len(grid))
-        if guard is None:
-            guard = MenuLayoutGuard(max_row=len(grid))
         baseline_guard = self.layout_guard
         baseline = None
         try:
@@ -1750,6 +1832,15 @@ class CombinedQuoteWriter:
             # Gateway không có cấu trúc hoặc lỗi tạm thời: vẫn khóa merge/A:H.
             baseline = None
         capacity = MenuCapacity.from_baseline(baseline) if baseline is not None else None
+        # Ảnh chụp A1:ZZ dừng ở ô cuối có giá trị nên dòng trống cuối vùng A:H
+        # (trước panel J:M) không nằm trong len(grid). Guard phải mở tới cuối vùng
+        # ghi được, nếu không sản phẩm mới không thể vào dòng trống hợp lệ.
+        limit = len(grid)
+        if capacity is not None and capacity.last_writable_row is not None:
+            limit = max(limit, capacity.last_writable_row)
+        guard = menu_guard_from_sheet_meta(meta, max_row=limit)
+        if guard is None:
+            guard = MenuLayoutGuard(max_row=limit)
         return guard.merged_with(baseline_guard), capacity
 
     def _apply(self, plans: list[TabPlan]) -> None:
