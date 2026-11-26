@@ -5,8 +5,8 @@ name: sync-menu
 # Render giữ scheduler tắt. sync-sources vẫn chỉ đọc.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/5 * * * *"
+  #schedule:
+    #- cron: "*/5 * * * *"
 
 concurrency:
   group: sync-menu
