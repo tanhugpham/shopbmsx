@@ -139,6 +139,9 @@ Lần gom 4.3J đã lưu `backups/menu-before-20261126-111724.json` (toàn bộ 
 4. Muốn dừng hẳn việc gom: đặt `MENU_GROUP_SIMILAR=false` trong `.env` và trong
    workflow, rồi chạy lại `sync-menu`.
 
+Bản local giữ lại `backups/migration-20261126T111432+0700*/` (chụp 11:14, trước lượt
+ghi 11:17) là điểm đối chiếu thứ hai cho vùng `MENU` trước khi gom.
+
 ### 6.3 Khôi phục catalog/Docs
 
 ```powershell
