@@ -153,3 +153,51 @@ python -m shop_integration menu-audit --json backups/menu-audit-phase43d.json
 ```
 
 `menu-audit` không ghi Google Sheets. File JSON chỉ là báo cáo local.
+
+## 9. Tự mở rộng vùng sản phẩm (bỏ giới hạn 23/26/30 dòng)
+
+`src/shop_integration/menu_expand.py` chèn thêm dòng rỗng ngay sau dòng sản phẩm
+cuối cùng khi nguồn có nhiều sản phẩm hơn số ô của vùng chọn. Không cần sửa tay
+`K38`, `J39`, `J40` hay hàng trống: mọi vùng phụ thuộc dòng cuối được căng lại
+trong cùng một `batchUpdate`.
+
+Nguyên tắc:
+
+- Vùng sản phẩm = `product_start_row` … dòng cuối dropdown `K` của MENU.
+  Số ô cần có = sản phẩm API + số dòng nhập tay trên `NASTELEID`
+  (`menu_sync._menu_zone_target`).
+- Chèn `MENU_EXPAND_STEP` dòng một lần (mặc định 10), tối đa `MENU_EXPAND_MAX_ROWS`
+  (mặc định 40 mỗi lượt); thiếu nhiều hơn thì lượt sync sau chèn tiếp và ghi chú
+  lại số chỗ còn thiếu.
+- Điểm chèn là ngay sau dòng cuối vùng chọn, và không vượt quá `panel_start_row - 1`
+  (panel chi tiết `J:M` dời xuống nguyên khối, nội dung không bị sửa).
+- Requests theo thứ tự: `insertDimension` → `setDataValidation` cho `K` (nếu vùng
+  chọn đổi) → `updateCells` cho công thức `J` (chỉ ô có `B…:…`) → định dạng điều
+  kiện cột `H` → `updateProtectedRange` cho vùng bảo vệ nằm dưới điểm chèn.
+- Không gộp/bỏ gộp ô (preflight vẫn yêu cầu 62 merge), không ghi giá trị ô sản phẩm,
+  không đụng `J:M`.
+
+Đọc/ghi baseline khi vùng đã dài ra:
+
+- `menu_expand.menu_selector_span` đọc vùng chọn từ chính rule của dropdown `K`.
+  `menu_preflight` dùng hàm này, nên một tham chiếu chéo sheet kiểu
+  `BAO_GIA_TONG_HOP!B2:E26` trong `J40` không còn kéo vùng chọn lên dòng 2.
+- `menu_expansion_shift` / `menu_preflight._shift_rows` nhận ra "baseline cũ + N
+  dòng" và trả về `N`, nên preflight chấp nhận layout đã tự mở rộng thay vì báo
+  lệch. Lệch thật (công thức/merge/bảo vệ khác) vẫn bị chặn.
+
+Cờ môi trường: `MENU_AUTO_EXPAND` (mặc định `true`), `MENU_EXPAND_STEP` (1–50),
+`MENU_EXPAND_MAX_ROWS` (1–200). Xem [setup_vi.md](setup_vi.md).
+
+Sau lần mở rộng thật đầu tiên, baseline cũ vẫn dùng được: preflight và
+`_menu_layout_guard` nhận ra phép dịch dòng và chỉ ghi chú. Muốn chốt mốc mới thì
+chạy `python -m shop_integration menu-baseline --out data/menu-baseline.json`.
+
+`tests/test_phase43d_menu_capacity.py` thêm 10 ca (file có 29 ca): chạy thử không ghi,
+chèn dòng + căng `K`/`J`, không đổi merge, no-op khi còn chỗ, tắt bằng
+`MENU_AUTO_EXPAND=false`, trần `MENU_EXPAND_MAX_ROWS`, dời protected range và định
+dạng điều kiện, baseline dịch đúng sau khi chèn, phát hiện lệch thật, preflight đọc
+vùng chọn từ dropdown thay vì `B2:E26`, và `_menu_zone_target` cộng dòng nhập tay.
+
+Toàn bộ: `pytest` **350 passed** (14 ca gốc Phase 4.3D vẫn xanh).
+

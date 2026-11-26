@@ -5,6 +5,7 @@ Không ghi Google Sheets. Mọi test dùng gateway giả hoặc cấu trúc dự
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ from shop_integration.combined_quote import (
     TAB_AUTO,
     TAB_MENU,
     CombinedQuoteWriter,
+    manual_quote_rows,
     parse_menu_regions,
     plan_menu_cells,
     plan_tab,
@@ -25,6 +27,12 @@ from shop_integration.combined_quote import (
 )
 from shop_integration.errors import MenuLayoutError, SheetLayoutError
 from shop_integration.menu_audit import audit_menu_grid, same_source_product
+from shop_integration.menu_expand import (
+    auto_expand_menu,
+    menu_expansion_shift,
+    menu_selector_span,
+    shift_menu_baseline,
+)
 from shop_integration.menu_layout import (
     MenuCapacity,
     MenuLayoutGuard,
@@ -32,6 +40,12 @@ from shop_integration.menu_layout import (
     menu_structure_diff,
     validate_menu_rows,
 )
+from shop_integration.menu_preflight import (
+    _has_panel_formulas,
+    _has_selector_dropdown,
+    _shift_rows,
+)
+from shop_integration.menu_sync import _menu_zone_target
 from shop_integration.models import Product, Variant
 from tests.test_combined_quote import QuoteMemory, _products
 from tests.test_phase43b_menu_layout import StructuredBook
@@ -587,6 +601,285 @@ def test_shifted_bao_gia_columns_are_rejected_before_read_or_write() -> None:
             sources_to_refresh={SOURCE_SHOP},
         )
     assert shop_sheet_rows([list(QUOTE_HEADERS)])[0] == []
+
+
+def _expand_book(
+    structure: dict[str, Any] | None = None,
+    *,
+    manual: list[list[Any]] | None = None,
+) -> StructuredBook:
+    """Sổ giả: MENU đúng như ``_live_grid`` cộng bảng NASTELEID (mặc định chỉ header)."""
+
+    payload = structure or _structure()
+    return StructuredBook(
+        [TAB_MENU, "NASTELEID", TAB_AUTO, "BAO_GIA_TONG_HOP"],
+        {
+            TAB_MENU: [list(row) for row in payload["values"]],
+            "NASTELEID": [list(row) for row in (manual or [list(QUOTE_HEADERS)])],
+        },
+        payload,
+    )
+
+
+def _with_protected_ids(structure: dict[str, Any]) -> dict[str, Any]:
+    """Gắn ``protectedRangeId`` như API trả về, để dời vùng bảo vệ được."""
+
+    structure["protected_ranges_raw"] = [
+        {
+            "protectedRangeId": 901 + index,
+            "range": {
+                "sheetId": structure["sheet_id"],
+                **{
+                    key: item[key]
+                    for key in (
+                        "startRowIndex",
+                        "endRowIndex",
+                        "startColumnIndex",
+                        "endColumnIndex",
+                    )
+                },
+            },
+            "warningOnly": bool(item.get("warningOnly")),
+        }
+        for index, item in enumerate(structure["protected_ranges"])
+    ]
+    return structure
+
+
+def test_expansion_plan_grows_zone_but_dry_run_does_not_write() -> None:
+    book = _expand_book()
+    notes: list[str] = []
+
+    plan = auto_expand_menu(book, "SID", 26, headers=MENU_HEADERS, notes=notes, apply=False)
+
+    assert plan is not None
+    assert plan.rows == 10
+    assert plan.insert_at_row == 31
+    assert plan.insert_index == 30
+    assert plan.product_count == 26
+    assert plan.zone_rows_before == 23
+    assert plan.new_zone_rows == 33
+    assert (plan.old_selector_end_row, plan.new_selector_end_row) == (30, 40)
+    assert (plan.old_panel_start_row, plan.new_panel_start_row) == (37, 47)
+    assert book.format_requests == []
+    assert book.batches == []
+    assert any("chỉ chạy thử" in note for note in notes)
+    assert "dòng 31" in plan.summary()
+    assert "B8:B40" in plan.summary()
+
+
+def test_expansion_inserts_rows_and_only_restretches_dependents() -> None:
+    book = _expand_book()
+
+    plan = auto_expand_menu(book, "SID", 26, headers=MENU_HEADERS, notes=[])
+
+    assert plan is not None
+    assert len(book.format_requests) == 1
+    requests = book.format_requests[0]
+    assert requests[0] == {
+        "insertDimension": {
+            "range": {
+                "sheetId": 1,
+                "dimension": "ROWS",
+                "startIndex": 30,
+                "endIndex": 40,
+            },
+            "inheritFromBefore": True,
+        }
+    }
+    # Chỉ chèn dòng: không gộp/bỏ gộp, không ghi giá trị ô sản phẩm nào.
+    assert [item for item in requests if "mergeCells" in item or "unmergeCells" in item] == []
+    assert book.batches == []
+
+    validation = next(item["setDataValidation"] for item in requests if "setDataValidation" in item)
+    assert validation["range"] == {
+        "sheetId": 1,
+        "startRowIndex": 47,
+        "endRowIndex": 48,
+        "startColumnIndex": 10,
+        "endColumnIndex": 11,
+    }
+    assert validation["rule"]["condition"]["values"][0]["userEnteredValue"] == "=MENU!$B$8:$B$40"
+
+    formulas = {
+        item["updateCells"]["range"]["startRowIndex"]: item["updateCells"]
+        for item in requests
+        if "updateCells" in item
+    }
+    assert sorted(formulas) == [48, 49]
+    first = formulas[48]["rows"][0]["values"][0]["userEnteredValue"]["formulaValue"]
+    second = formulas[49]["rows"][0]["values"][0]["userEnteredValue"]["formulaValue"]
+    assert "B8:H40" in first
+    assert "B8:C40" in second
+    assert "BAO_GIA_TONG_HOP!C2:E24" in second  # tham chiếu chéo sheet giữ nguyên
+    assert formulas[48]["range"]["startColumnIndex"] == 9
+    assert formulas[48]["fields"] == "userEnteredValue.formulaValue"
+
+
+def test_no_expansion_when_zone_still_has_room() -> None:
+    book = _expand_book()
+    notes: list[str] = []
+
+    plan = auto_expand_menu(book, "SID", 20, headers=MENU_HEADERS, notes=notes)
+
+    assert plan is None
+    assert book.format_requests == []
+    assert any("Vùng sản phẩm dòng 8–30" in note for note in notes)
+    assert any("thiếu 0 chỗ" in note for note in notes)
+
+
+def test_expansion_disabled_by_env_is_a_single_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MENU_AUTO_EXPAND", "false")
+    book = _expand_book()
+    notes: list[str] = []
+
+    plan = auto_expand_menu(book, "SID", 60, headers=MENU_HEADERS, notes=notes)
+
+    assert plan is None
+    assert book.format_requests == []
+    assert notes == ["MENU_AUTO_EXPAND=false: giữ nguyên vùng sản phẩm."]
+
+
+def test_expansion_caps_rows_and_reports_remaining_shortfall(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MENU_EXPAND_MAX_ROWS", "10")
+    book = _expand_book()
+    notes: list[str] = []
+
+    plan = auto_expand_menu(book, "SID", 60, headers=MENU_HEADERS, notes=notes, apply=False)
+
+    assert plan is not None
+    assert plan.rows == 10
+    assert plan.product_count == 60
+    assert plan.new_zone_rows == 33
+    assert any("Chỉ chèn thêm 10 dòng dù thiếu 37 chỗ" in note for note in plan.notes)
+    # Lượt chạy thử giữ kế hoạch trong plan, không ghi vào notes của lượt sync.
+    assert notes and "chỉ chạy thử" in notes[0]
+
+
+def test_insert_shifts_protected_range_and_conditional_format() -> None:
+    structure = _with_protected_ids(_structure())
+    structure["conditional_formats"] = [
+        {
+            "ranges": [
+                {
+                    "sheetId": 1,
+                    "startRowIndex": 5,
+                    "endRowIndex": 45,
+                    "startColumnIndex": 7,
+                    "endColumnIndex": 8,
+                }
+            ],
+            "booleanRule": {
+                "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": "IN STOCK"}]},
+                "format": {"backgroundColor": {"red": 0.85, "green": 0.95, "blue": 0.85}},
+            },
+        }
+    ]
+    book = _expand_book(structure)
+
+    plan = auto_expand_menu(book, "SID", 26, headers=MENU_HEADERS, notes=[])
+
+    assert plan is not None
+    requests = book.format_requests[0]
+    assert len(requests) == 6
+
+    protected = [item["updateProtectedRange"] for item in requests if "updateProtectedRange" in item]
+    assert len(protected) == 1  # vùng A1:H6 nằm trên điểm chèn nên giữ nguyên
+    assert protected[0]["protectedRange"]["protectedRangeId"] == 902
+    assert protected[0]["protectedRange"]["range"] == {
+        "sheetId": 1,
+        "startRowIndex": 0,
+        "endRowIndex": 65,
+        "startColumnIndex": 8,
+        "endColumnIndex": 13,
+    }
+    assert protected[0]["fields"] == "range"
+
+    conditional = next(
+        item["updateConditionalFormatRule"]
+        for item in requests
+        if "updateConditionalFormatRule" in item
+    )
+    assert conditional["index"] == 0
+    assert conditional["rule"]["ranges"][0]["endRowIndex"] == 55
+    assert conditional["rule"]["ranges"][0]["startRowIndex"] == 5
+
+
+def test_shift_menu_baseline_matches_google_after_insert() -> None:
+    baseline = menu_baseline_from_structure(_structure(), MENU_HEADERS)
+    shifted = shift_menu_baseline(
+        baseline,
+        insert_index=30,
+        rows=10,
+        old_selector_start_row=8,
+        old_selector_end_row=30,
+        new_selector_end_row=40,
+    )
+
+    assert menu_structure_diff(baseline, shifted) != []
+    assert menu_selector_span(shifted) == (8, 40)
+    assert MenuCapacity.from_baseline(shifted).panel_start_row == 47
+    # Google chỉ chèn dòng: baseline dịch xuống đúng bằng số dòng đã chèn.
+    assert menu_expansion_shift(baseline, shifted) == 10
+    assert menu_structure_diff(shifted, shifted) == []
+    assert _shift_rows(baseline, shifted) == 10
+
+
+def test_baseline_shift_rejects_layout_drift() -> None:
+    baseline = menu_baseline_from_structure(_structure(), MENU_HEADERS)
+    shifted = shift_menu_baseline(
+        baseline,
+        insert_index=30,
+        rows=10,
+        old_selector_start_row=8,
+        old_selector_end_row=30,
+        new_selector_end_row=40,
+    )
+    drifted = replace(
+        shifted,
+        formulas=[
+            shifted.formulas[0],
+            {"cell": "J49", "formula": "=NOW()"},
+            shifted.formulas[2],
+        ],
+    )
+
+    assert menu_expansion_shift(baseline, drifted) is None
+    assert _shift_rows(baseline, drifted) is None
+
+
+def test_preflight_reads_selector_span_from_dropdown_not_panel_formula() -> None:
+    structure = _structure()
+    structure["formulas"][2]["formula"] = (
+        "=IFERROR(VLOOKUP(K38; BAO_GIA_TONG_HOP!B2:E26; 3; FALSE); "
+        'IFERROR(VLOOKUP(K38; B8:C30; 2; FALSE); "—"))'
+    )
+    baseline = menu_baseline_from_structure(structure, MENU_HEADERS)
+    capacity = MenuCapacity.from_baseline(baseline)
+
+    # menu_layout vẫn gộp cả B2:E26 chéo sheet, nên vùng chọn bị kéo lên dòng 2…
+    assert capacity.selector_span == "B2:B30"
+    # …nhưng dropdown mới là chuẩn, preflight phải đọc đúng B8:B30.
+    assert menu_selector_span(baseline) == (8, 30)
+    assert _has_selector_dropdown(baseline, capacity) is True
+    assert _has_panel_formulas(baseline, capacity) is True
+
+
+def test_zone_target_counts_products_plus_manual_rows() -> None:
+    manual = [
+        list(QUOTE_HEADERS),
+        [1, "Combo tự nhập", "Mô tả", "1 Tháng", "BHF", 150000, 1],
+        [2, "Gói nhập tay 2", "Mô tả", "1 năm", "BH7D", 350000, 2],
+    ]
+    book = _expand_book(manual=manual)
+
+    assert _menu_zone_target(book, "SID", 30) == 32
+    rows, _note = manual_quote_rows(manual)
+    assert len(rows) == 2
+    assert _menu_zone_target(book, "SID", 0) == 2
+
+
+
 
 
 def test_duplicate_product_names_with_different_ids_are_rejected() -> None:

@@ -204,6 +204,7 @@ class GoogleSheetsGateway:
                             "values": list(condition.get("values") or [])
                             if isinstance(condition, dict)
                             else [],
+                            "rule": validation,
                         }
                     )
             values.append(line)
@@ -220,12 +221,20 @@ class GoogleSheetsGateway:
             "sheet_id": properties.get("sheetId"),
             "grid_properties": dict(properties.get("gridProperties") or {}),
             "conditional_format_count": len(rules) if isinstance(rules, list) else 0,
+            "conditional_formats": [
+                rule for rule in (rules if isinstance(rules, list) else []) if isinstance(rule, dict)
+            ],
             "merges": [
                 merge for merge in (sheet.get("merges") or []) if isinstance(merge, dict)
             ],
             "protected_ranges": normalize_protected_ranges(
                 sheet.get("protectedRanges") or []
             ),
+            "protected_ranges_raw": [
+                item
+                for item in (sheet.get("protectedRanges") or [])
+                if isinstance(item, dict)
+            ],
             "values": values,
             "formulas": formulas,
             "data_validations": validations,

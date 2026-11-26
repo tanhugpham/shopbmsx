@@ -41,6 +41,9 @@ Copy-Item .env.example .env
 | `DRY_RUN` | `true` để không ghi Google. `false` để ghi. |
 | `ENABLE_PURCHASE` | Giữ `false`. Giá trị `true` vẫn không mở được đường tạo đơn. |
 | `ENABLE_TELEGRAM` | Giữ `false`. Chưa có bot vận hành. |
+| `MENU_AUTO_EXPAND` | Mặc định `true`: MENU tự chèn thêm dòng khi nguồn có nhiều sản phẩm hơn vùng chọn `K`. `false` để giữ nguyên layout và chỉ ghi cảnh báo. |
+| `MENU_EXPAND_STEP` | Số dòng chèn mỗi lần, 1–50, mặc định `10`. |
+| `MENU_EXPAND_MAX_ROWS` | Trần số dòng chèn trong một lượt sync, 1–200, mặc định `40`. Thiếu hơn thì lượt sau chèn tiếp. |
 | `REQUEST_TIMEOUT_SECONDS` | Thời gian chờ mỗi request. Mặc định 30 giây. |
 | `NASTELE_BASE_URL` | Mặc định `https://nastele.online`. Phải dùng HTTPS. |
 | `NASTELE_API_KEY` | Key Nastele, gửi trong header `X-API-Key`. Để trống nếu chưa có. Không ghi vào Git. |

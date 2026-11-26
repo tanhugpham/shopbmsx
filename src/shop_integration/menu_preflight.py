@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,15 @@ from shop_integration.combined_quote import MENU_HEADERS
 from shop_integration.config import LEGACY_SPREADSHEET_ENV, Settings
 from shop_integration.content_overrides import OverrideStoreError, load_override_store
 from shop_integration.errors import BackupError, MenuLayoutError
-from shop_integration.menu_layout import load_menu_baseline, menu_structure_diff, read_menu_baseline
+from shop_integration.menu_expand import menu_expansion_shift, menu_selector_span
+from shop_integration.menu_layout import (
+    MenuBaseline,
+    MenuCapacity,
+    column_index,
+    load_menu_baseline,
+    menu_structure_diff,
+    read_menu_baseline,
+)
 from shop_integration.menu_region_backup import (
     OFFICIAL_SPREADSHEET_ID,
     assert_official_spreadsheet,
@@ -26,6 +35,8 @@ from shop_integration.workspace import open_sheets
 RENDER_HEALTH_URL = "https://shopbmsx.onrender.com/health"
 REQUIRED_MERGE_COUNT = 62
 DEFAULT_BASELINE = Path("data") / "menu-baseline.json"
+MENU_SELECTOR_COLUMN = column_index("K")
+MENU_PANEL_COLUMN = column_index("J")
 
 
 def baseline_path() -> Path:
@@ -196,32 +207,98 @@ def _check_baseline(gateway: Any, settings: Settings, blockers: list[str], notes
             f"MENU phải giữ {REQUIRED_MERGE_COUNT} vùng gộp. "
             f"Baseline {saved.merge_count}, hiện tại {current.merge_count}."
         )
-    formula_cells = {item.get("cell") for item in current.formulas}
-    if "J39" not in formula_cells or "J40" not in formula_cells:
-        blockers.append("Thiếu công thức J39 hoặc J40.")
-    if not _has_k38(current.data_validations):
-        blockers.append("Thiếu dropdown K38.")
+    capacity = MenuCapacity.from_baseline(current)
+    if not _has_selector_dropdown(current, capacity):
+        blockers.append("Thiếu dropdown chọn sản phẩm trỏ đúng vùng sản phẩm A:B.")
+    if not _has_panel_formulas(current, capacity):
+        blockers.append("Thiếu công thức bảng chi tiết trỏ đúng vùng sản phẩm.")
     if saved.headers != list(MENU_HEADERS):
         blockers.append("Baseline MENU không đúng dòng tiêu đề A:H.")
     differences = menu_structure_diff(saved, current)
     if differences:
-        blockers.append("MENU lệch baseline đã xác minh: " + "; ".join(differences[:5]))
+        shift_rows = _shift_rows(saved, current)
+        if shift_rows:
+            notes.append(
+                f"MENU tự mở rộng {shift_rows} dòng so với baseline. "
+                "Merge, công thức, dropdown, vùng bảo vệ khớp đúng phép dịch dòng."
+            )
+        else:
+            shown = "; ".join(differences[:5])
+            blockers.append(f"MENU lệch baseline đã xác minh: {shown}")
     else:
         notes.append(
             f"Baseline khớp Google. merge={current.merge_count}, "
-            f"công thức={len(current.formulas)}, dropdown={len(current.data_validations)}."
+            f"công thức={len(current.formulas)}, dropdown={len(current.data_validations)}, "
+            f"vùng chọn={capacity.selector_span or 'không rõ'}."
         )
 
 
-def _has_k38(validations: list[dict[str, Any]]) -> bool:
-    for item in validations:
-        rows = item.get("rows") or []
-        label = str(item.get("range") or item.get("cell") or "").upper()
-        if isinstance(rows, list) and 38 in rows and label.startswith("K"):
-            return True
-        if label.startswith("K38"):
-            return True
+def _shift_rows(saved: MenuBaseline, current: MenuBaseline) -> int | None:
+    """Số dòng MENU đã tự mở rộng nếu hiện tại chỉ là baseline dịch xuống."""
+
+    try:
+        return menu_expansion_shift(saved, current)
+    except Exception:
+        return None
+
+
+def _cell_row_column(cell: object) -> tuple[int | None, int | None]:
+    match = re.match(r"^([A-Za-z]{1,3})(\d+)$", str(cell or "").strip())
+    if match is None:
+        return None, None
+    return int(match.group(2)), column_index(match.group(1))
+
+
+def _validation_row_column(item: dict[str, Any]) -> tuple[int | None, int | None]:
+    cell = item.get("cell")
+    if cell:
+        return _cell_row_column(cell)
+    return _cell_row_column(str(item.get("range") or "").split(":", 1)[0])
+
+
+def _selector_span(baseline: MenuBaseline, capacity: MenuCapacity) -> str:
+    """Vùng chọn lấy từ dropdown K của MENU, không lấy ``B2:E26`` chéo sheet của J."""
+
+    start, end = menu_selector_span(baseline)
+    if start is not None and end is not None:
+        return f"B{start}:B{end}"
+    return capacity.selector_span
+
+
+def _has_selector_dropdown(baseline: MenuBaseline, capacity: MenuCapacity) -> bool:
+    """Dropdown cột K phải trỏ đúng vùng chọn hiện tại, dù vùng đó đã dài ra."""
+
+    span = _selector_span(baseline, capacity)
+    if not span:
+        return False
+    for item in baseline.data_validations:
+        row, column = _validation_row_column(item)
+        if row is None or column != MENU_SELECTOR_COLUMN:
+            continue
+        for value in item.get("values") or []:
+            text = value.get("userEnteredValue") if isinstance(value, dict) else value
+            if span in str(text or "").replace("$", ""):
+                return True
     return False
+
+
+def _has_panel_formulas(baseline: MenuBaseline, capacity: MenuCapacity) -> bool:
+    """Ít nhất hai công thức cột J phải VLOOKUP từ dòng sản phẩm đầu tiên."""
+
+    start, _end = menu_selector_span(baseline)
+    if start is None:
+        start = capacity.selector_min_row
+    if start is None:
+        return False
+    needle = f"B{start}:"
+    hits = 0
+    for item in baseline.formulas:
+        row, column = _cell_row_column(item.get("cell"))
+        if row is None or column != MENU_PANEL_COLUMN:
+            continue
+        if needle in str(item.get("formula") or "").replace("$", ""):
+            hits += 1
+    return hits >= 2
 
 
 def _verify_backup(gateway: Any, settings: Settings, blockers: list[str], notes: list[str]) -> None:

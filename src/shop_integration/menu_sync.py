@@ -15,12 +15,20 @@ from typing import Any
 from shop_integration.api_client import ShopApiClient
 from shop_integration.combined_quote import (
     MENU_HEADERS,
+    TAB_MANUAL,
     CombinedQuoteWriter,
+    manual_quote_rows,
     shop_quote_rows,
 )
 from shop_integration.config import Settings
 from shop_integration.errors import MenuLayoutError
 from shop_integration.logging_utils import redact
+from shop_integration.menu_expand import (
+    MenuExpansionPlan,
+    auto_expand_menu,
+    auto_expand_enabled,
+    menu_expansion_shift,
+)
 from shop_integration.menu_layout import (
     LayoutLockedGateway,
     MenuLayoutGuard,
@@ -224,6 +232,26 @@ def _run_menu_sync(
             errors.append(str(exc))
             layout_blocked = True
         if not layout_blocked:
+            expanded = _expand_menu_capacity(
+                gateway,
+                spreadsheet_id,
+                len(shop_rows),
+                live=live,
+                notes=notes,
+                errors=errors,
+            )
+            if expanded is not None and expanded.rows > 0 and live:
+                try:
+                    layout_guard = _menu_layout_guard(
+                        gateway,
+                        spreadsheet_id,
+                        started_text,
+                        notes,
+                    )
+                except MenuLayoutError as exc:
+                    errors.append(str(exc))
+                    layout_blocked = True
+        if not layout_blocked:
             guarded = (
                 LayoutLockedGateway(gateway, layout_guard) if layout_guard else gateway
             )
@@ -380,14 +408,88 @@ def _menu_layout_guard(
     if baseline_path:
         saved = load_menu_baseline(baseline_path)
         differences = menu_structure_diff(saved, baseline)
-        if differences:
+        shift_rows = _baseline_shift_rows(saved, baseline) if differences else None
+        if shift_rows:
+            notes.append(
+                f"MENU đã tự mở rộng {shift_rows} dòng so với baseline "
+                f"'{baseline_path}'. Chấp nhận vì đúng phép dịch dòng của tool."
+            )
+        elif differences:
             shown = "; ".join(differences[:5])
             more = f" (+{len(differences) - 5} khác biệt nữa)" if len(differences) > 5 else ""
             raise MenuLayoutError(
                 f"MENU lệch baseline '{baseline_path}': {shown}{more}. Không ghi ô nào."
             )
-        notes.append(f"MENU khớp baseline '{baseline_path}'.")
+        else:
+            notes.append(f"MENU khớp baseline '{baseline_path}'.")
     return MenuLayoutGuard.from_baseline(baseline)
+
+
+def _baseline_shift_rows(saved: Any, current: Any) -> int | None:
+    """Số dòng tự mở rộng nếu ``current`` chỉ là ``saved`` dịch xuống. Không thì ``None``."""
+
+    try:
+        return menu_expansion_shift(saved, current)
+    except Exception:
+        return None
+
+
+def _menu_zone_target(gateway: Any, spreadsheet_id: str, shop_count: int) -> int:
+    """Số ô vùng sản phẩm cần có: sản phẩm API cộng số dòng NASTELEID nhập tay."""
+
+    total = max(int(shop_count), 0)
+    reader = getattr(gateway, "get_values", None)
+    if not callable(reader):
+        return total
+    try:
+        grid = reader(spreadsheet_id, f"'{TAB_MANUAL}'!A1:ZZ")
+    except Exception:
+        return total
+    if not isinstance(grid, list) or not grid:
+        return total
+    try:
+        rows, _note = manual_quote_rows([row for row in grid if isinstance(row, list)])
+    except Exception:
+        return total
+    del _note
+    return total + len(rows)
+
+
+def _expand_menu_capacity(
+    gateway: Any,
+    spreadsheet_id: str,
+    shop_count: int,
+    *,
+    live: bool,
+    notes: list[str],
+    errors: list[str],
+) -> MenuExpansionPlan | None:
+    """Chèn dòng MENU khi số sản phẩm vượt quá vùng chọn hiện tại. Không ghi giá."""
+
+    if not auto_expand_enabled():
+        return None
+    target = _menu_zone_target(gateway, spreadsheet_id, shop_count)
+    try:
+        plan = auto_expand_menu(
+            gateway,
+            spreadsheet_id,
+            target,
+            headers=MENU_HEADERS,
+            notes=notes,
+            apply=live,
+        )
+    except Exception as exc:  # mở rộng lỗi thì vẫn ghi phần sản phẩm vừa đủ chỗ
+        errors.append(f"Tự mở rộng MENU lỗi: {exc}")
+        return None
+    if plan is not None and live:
+        logger.info(
+            "MENU auto-expand rows=%s insert_at_row=%s products=%s zone_before=%s",
+            plan.rows,
+            plan.insert_at_row,
+            plan.product_count,
+            plan.zone_rows_before,
+        )
+    return plan
 
 
 def _sanitize_description_tabs(
