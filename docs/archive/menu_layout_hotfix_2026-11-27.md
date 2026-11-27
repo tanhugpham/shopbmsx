@@ -104,3 +104,33 @@ tức 7 dòng cho 35 sản phẩm và 10 dòng do `MENU_AUTO_EXPAND` chèn thêm
 2. Không bật lại Google Sheets **Table** trên `A:H`; nếu cần lọc, dùng Filter view.
 3. Muốn đổi layout có chủ ý: sửa tay → `menu-baseline --out` → commit
    `data/menu-baseline.json`, không sửa baseline để lách preflight.
+
+## 8. Tiếp theo (cùng ngày) — màu STATUS và baseline
+
+Chủ shop chủ động thêm 4 rule định dạng điều kiện cho cột `H` (STATUS) để dòng nhãn
+`H7` cũng lên màu theo `IN STOCK` / `LOW STOCK` / `SOLD OUT` / `CONTACT`. Đó là thay
+đổi giao diện hợp lệ, **giữ nguyên**; cột `A:G` không bị ảnh hưởng.
+
+Preflight sau đó FAIL với `Vùng gộp đổi: mất 18, thêm 18`, `Công thức đổi: mất 2,
+thêm 2`, `Dropdown đổi: mất 1, thêm 1`, `Số rule định dạng điều kiện đổi từ 8 sang 12`,
+`Vùng bảo vệ đổi: mất 1, thêm 1`. Nguyên nhân: `menu_expansion_shift` chỉ nhận phép
+dịch dòng khi **toàn bộ** cấu trúc khớp baseline sau khi dịch; số rule đổi nên phép
+dịch bị từ chối và preflight in ra diff thô.
+
+Đã xác minh từng phần trước khi sửa gì:
+
+| Hạng mục | Baseline | Hiện tại | Kết luận |
+| --- | --- | --- | --- |
+| Vùng gộp | 62 (`J37:M45`, footer `A46:H53`) | 62 (`J54:M62`, footer `A63:H70`) | dịch đúng +17 dòng, không mất/thêm thật |
+| Công thức | `J39`, `J40` trỏ `K38` | `J56`, `J57` trỏ `K55`, `B8:H52` / `B8:C52` | đúng ô chọn sau khi mở rộng |
+| Dropdown | `K38 = B8:B35` | `K55 = B8:B52` | đúng vùng sản phẩm, 45 chỗ |
+| Vùng bảo vệ | `I1:M55` | `I1:M72` | phủ panel mới kết thúc dòng 70 |
+| Rule định dạng điều kiện | 8 | 12 | 4 rule mới chỉ trên `H7`/`H8:H50`, đúng 4 nhãn trạng thái |
+| Sản phẩm `A:H` | 35 | 43 | giá đều là số, tồn kho/`STATUS` hợp lệ, không có header lặp |
+
+Thay đổi duy nhất trong repo: `conditional_format_count` của
+`data/menu-baseline.json` từ 8 → 12. Baseline vẫn giữ mốc hình học gốc
+(`B8:B35`, panel `J37:M45`) vì `sync-menu-restore` và phép dịch dòng tính từ mốc đó;
+không đổi merge/công thức/dropdown/protected để lách preflight. Quy trình xác minh
+tương tự được ghi ở `docs/operations.md` mục 6.5.
+

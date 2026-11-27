@@ -114,6 +114,8 @@ class FakeMenuBook:
         formulas: Sequence[dict[str, str]],
         widths: dict[str, int],
         protected: Sequence[dict[str, Any]],
+        *,
+        conditional_format_count: int = 8,
     ) -> None:
         self.values = [list(row) + [""] * (COLUMNS - len(row)) for row in values]
         self.merges = [dict(item) for item in merges]
@@ -121,6 +123,8 @@ class FakeMenuBook:
         self.validations: list[dict[str, Any]] = []
         self.widths = dict(widths)
         self.protected = [dict(item) for item in protected]
+        self.conditional_format_count = int(conditional_format_count)
+
         self.batches = 0
         self.value_batches = 0
 
@@ -137,7 +141,7 @@ class FakeMenuBook:
                 "columnCount": 26,
                 "frozenRowCount": 6,
             },
-            "conditional_format_count": 8,
+            "conditional_format_count": self.conditional_format_count,
             "conditional_formats": [],
             "merges": [dict(item) for item in self.merges],
             "protected_ranges": normalize_protected_ranges(self.protected),
@@ -300,6 +304,7 @@ def _book() -> tuple[FakeMenuBook, Any]:
         formulas=[{"cell": "G5", "formula": "=NOW()"}],
         widths=widths,
         protected=protected,
+        conditional_format_count=baseline.conditional_format_count,
     )
     return book, baseline
 

@@ -180,12 +180,38 @@ Nếu Google Sheets đang bật **Table** (Bảng) trên vùng `A:H` thì phải
 (`deleteTable`), vì Google chặn xóa dòng tiêu đề của Table và Table cũng tự thêm
 dòng tiêu đề + auto-fit khổ cột. Sau khi xóa Table, chạy lại `sync-menu-restore`.
 
+### 6.5 Màu STATUS và baseline MENU
+
+Màu trạng thái sản phẩm là **định dạng điều kiện trên cột `H`** (STATUS), không phải
+giá trị ô, nên được giữ nguyên và không bị `sync-menu` ghi đè. Chủ shop có thể thêm
+rule cho các nhãn trạng thái đang dùng (`IN STOCK`, `LOW STOCK`, `SOLD OUT`, `CONTACT`)
+theo cách thủ công; đó là thay đổi giao diện hợp lệ.
+
+`data/menu-baseline.json` là **mốc hình học trước lần tự mở rộng đầu tiên**
+(vùng chọn `B8:B35`, panel `J37:M45`, footer `A46:H53`). Không được đổi mốc này sang
+hình học đã mở rộng: `sync-menu-restore` và phép dịch dòng đều tính từ mốc gốc.
+
+Vì vậy khi Google đã tự mở rộng và số rule định dạng điều kiện cũng đổi, preflight
+báo `mất 18/thêm 18` vùng gộp (đúng là baseline dịch xuống) và không nhận ra phép
+dịch, do phần đếm rule không khớp. Trình tự xử lý:
+
+1. `menu-audit` + đọc cấu trúc: xác nhận mọi vùng gộp/footer dịch **cùng một số dòng**,
+   dropdown `K` và hai công thức `J:M` trỏ đúng ô chọn mới, vùng bảo vệ `I:M` phủ hết
+   panel mới, và mọi rule định dạng điều kiện chỉ nằm trên cột `H`.
+2. Chỉ cập nhật `conditional_format_count` trong `data/menu-baseline.json` cho bằng
+   số rule đã xác minh; **không** đổi merge/công thức/dropdown/protected của baseline.
+3. Chạy lại `sync-menu-preflight`; phải PASS kèm ghi chú `MENU tự mở rộng <n> dòng`.
+
+Không xóa rule định dạng điều kiện mới và không đổi baseline chỉ để preflight im lặng:
+mỗi lần số rule đổi tiếp vẫn phải FAIL và được xác minh lại như trên.
+
 ## 7. Sự cố thường gặp
 
 | Hiện tượng | Nguyên nhân thường gặp | Việc cần làm |
 | --- | --- | --- |
 | `Preflight: FAIL` + tên biến | thiếu secret, còn biến cũ, cờ chưa `false` | sửa secret/`.env`, chạy lại `config-check` |
 | `MENU lệch baseline 'data/menu-baseline.json'` | ai đó đổi merge/công thức/dropdown/header | `sync-menu-restore` (mục 6.4), không sửa tay từng ô |
+| `Số rule định dạng điều kiện đổi từ 8 sang 12` | chủ shop thêm rule màu STATUS trên cột `H` | xác minh rule chỉ nằm trên `H` rồi cập nhật đúng số rule trong baseline (mục 6.5), giữ nguyên rule |
 | `Dòng tiêu đề MENU bị nhân bản ở dòng 8` | ai đó chuyển vùng `A:H` thành Table hoặc copy dòng tiêu đề | xóa Table nếu có, rồi `sync-menu-restore --apply --confirm` |
 | `Cannot delete a table header row` | Google Sheets Table đang bật trên `A:H` | `deleteTable` rồi chạy lại `sync-menu-restore` |
 | `Dòng tiêu đề MENU không đúng` | header A–H đổi tên hoặc đổi thứ tự | sửa header, không đổi baseline để lách |
