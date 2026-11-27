@@ -172,6 +172,40 @@ def build_parser() -> argparse.ArgumentParser:
     )
     menu_migrate.set_defaults(func=command_menu_migrate)
 
+    menu_restore = commands.add_parser(
+        "sync-menu-restore",
+        help=(
+            "Khôi phục layout MENU (merge, panel J:M, dropdown K, khổ cột) từ baseline. "
+            "Mặc định chỉ chạy thử."
+        ),
+    )
+    menu_restore.add_argument(
+        "--baseline",
+        default="data/menu-baseline.json",
+        help="Baseline MENU đã xác minh (merge, công thức, dropdown, khổ cột).",
+    )
+    menu_restore.add_argument(
+        "--panel",
+        default="data/menu-policy-panel.json",
+        help="Bản lưu nội dung panel chính sách J:M.",
+    )
+    menu_restore.add_argument(
+        "--json",
+        default="",
+        help="Ghi báo cáo khôi phục JSON ra file local.",
+    )
+    menu_restore.add_argument(
+        "--apply",
+        action="store_true",
+        help="Ghi Google sau khi backup READY. Bắt buộc đi cùng --confirm.",
+    )
+    menu_restore.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Xác nhận ghi thật. Không có cờ này thì luôn dry-run.",
+    )
+    menu_restore.set_defaults(func=command_sync_menu_restore)
+
     report = commands.add_parser("report", help="In báo cáo và ghi vào Google Doc khi không chạy thử")
     report.set_defaults(func=command_report)
 
@@ -701,6 +735,106 @@ def command_menu_migrate(args: argparse.Namespace, settings: Settings) -> int:
         )
         print(f"Đã lưu báo cáo migration: {target}")
     return 0 if result.status in {"PLANNED", "UP_TO_DATE", "APPLIED"} else 1
+
+
+def command_sync_menu_restore(args: argparse.Namespace, settings: Settings) -> int:
+    """Khôi phục layout MENU về baseline. Mặc định chỉ chạy thử, không ghi Google."""
+
+    import json
+
+    from shop_integration.combined_quote import TAB_MENU
+    from shop_integration.menu_layout import load_menu_baseline
+    from shop_integration.menu_region_backup import store_region_backup
+    from shop_integration.menu_repair import (
+        apply_menu_restore,
+        load_policy_panel,
+        plan_menu_restore,
+        verify_menu_restore,
+    )
+
+    if not settings.spreadsheet_id:
+        raise ConfigError("Thiếu GOOGLE_SPREADSHEET_ID.")
+    if args.apply and not args.confirm:
+        raise ConfigError("--apply phải đi cùng --confirm. Không ghi Google.")
+    workspace = open_workspace(settings, sheets=True)
+    gateway = workspace.sheets
+    if gateway is None:
+        raise ConfigError("Thiếu kết nối Google Sheets.")
+    baseline = load_menu_baseline(args.baseline)
+    panel = load_policy_panel(args.panel)
+    structure = gateway.get_sheet_structure(settings.spreadsheet_id, TAB_MENU)
+    plan = plan_menu_restore(structure, baseline, panel)
+    for line in plan.describe():
+        print(line)
+    live = bool(args.apply and args.confirm and not settings.dry_run)
+    if args.apply and settings.dry_run:
+        print("DRY_RUN=true: bỏ qua --apply, chỉ chạy thử.")
+    if plan.blocked:
+        print("Kế hoạch khôi phục bị chặn. Không ghi ô nào trên Google Sheets.")
+        return 1
+
+    report: dict[str, object] = {"phase": "plan", "plan": plan.as_dict()}
+    problems: list[str] = []
+    if not live:
+        print("Chạy thử: chưa ghi Google Sheets. Thêm --apply --confirm để ghi.")
+    else:
+        print(
+            store_region_backup(
+                gateway,
+                settings.spreadsheet_id,
+                secrets=settings.secret_values(),
+            )
+        )
+        stamp = format_timestamp(now_vietnam()).replace(":", "")
+        backup = Path("backups") / f"menu-restore-{stamp}.json"
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text(
+            json.dumps(
+                {
+                    "captured_at": stamp,
+                    "phase": "before-restore",
+                    "structure": structure,
+                    "values": gateway.get_values(
+                        settings.spreadsheet_id,
+                        f"'{TAB_MENU}'!A1:M80",
+                        value_render_option="FORMULA",
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"Backup local trước khi ghi: {backup}")
+        counts = apply_menu_restore(gateway, settings.spreadsheet_id, plan)
+        print("Đã ghi: " + ", ".join(f"{key}={value}" for key, value in counts.items()))
+        after = gateway.get_sheet_structure(settings.spreadsheet_id, TAB_MENU)
+        problems = verify_menu_restore(structure, after, baseline, plan, panel)
+        report = {
+            "phase": "applied",
+            "plan": plan.as_dict(),
+            "counts": counts,
+            "problems": problems,
+        }
+        for problem in problems:
+            print(f"SAU KHI GHI: {problem}")
+        if problems:
+            print("Khôi phục chưa đạt. Giữ backup và kiểm tra tay trước khi sync lại.")
+        else:
+            print(
+                "Sau khi ghi: layout khớp baseline, đủ vùng gộp, dropdown K và "
+                "công thức J:M đã về đúng chỗ."
+            )
+    if args.json:
+        target = Path(args.json)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Đã lưu báo cáo khôi phục: {target}")
+    return 0 if not problems else 1
 
 
 def _source_command(settings: Settings, *, write_sheets: bool) -> int:

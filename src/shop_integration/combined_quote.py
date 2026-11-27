@@ -510,6 +510,8 @@ def is_menu_product_row(row: list[Any] | None) -> bool:
     raw = row or []
     if is_category_header_row(raw):
         return False
+    if is_menu_header_row(raw):
+        return False
     label = str(_at(raw, 0) or "").strip()
     if _PRODUCT_ID_RE.match(label):
         return True
@@ -517,6 +519,19 @@ def is_menu_product_row(row: list[Any] | None) -> bool:
     price = _at(raw, 5)
     status = _at(raw, 7)
     return not _blank(product) and (not _blank(price) or not _blank(status))
+
+
+def is_menu_header_row(row: Sequence[Any] | None) -> bool:
+    """Dòng lặp lại đúng tiêu đề A:H (bị copy/paste trong Google Sheets).
+
+    Dòng như vậy không phải sản phẩm: nếu coi là sản phẩm thì lượt đồng bộ có thể
+    ghi đè lên dòng tiêu đề nhân bản và lệch toàn bộ vùng chọn bên dưới.
+    """
+
+    raw = row or []
+    cells = [_header(_at(raw, column)).upper() for column in range(MENU_COLUMNS)]
+    return cells == [str(header).strip().upper() for header in MENU_HEADERS]
+
 
 
 def list_menu_products(grid: list[list[Any]] | None) -> list[dict[str, Any]]:

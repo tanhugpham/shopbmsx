@@ -407,7 +407,7 @@
     },
     {
       "cell": "J40",
-      "formula": "=IFERROR(VLOOKUP(K38; BAO_GIA_TONG_HOP!B2:E26; 4; FALSE); IFERROR(VLOOKUP(K38; B8:C35; 2; FALSE); \"Vui lòng chọn sản phẩm ở ô trên để xem mô tả chi tiết.\"))"
+      "formula": "=IFERROR(VLOOKUP(K38; BAO_GIA_TONG_HOP!B2:E26; 2; FALSE); IFERROR(VLOOKUP(K38; B8:C35; 2; FALSE); \"Vui lòng chọn sản phẩm ở ô trên để xem mô tả chi tiết.\"))"
     }
   ],
   "data_validations": [

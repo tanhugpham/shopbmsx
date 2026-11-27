@@ -452,6 +452,43 @@ def _replace_span(text: str, old_start: int, old_end: int, new_end: int) -> str:
     return _SPAN.sub(_swap, text)
 
 
+_SELECTOR_KEY_REF = re.compile(r"(?<![A-Za-z0-9_$])\$?K\$?(\d+)(?!\d)")
+
+
+def _selector_ref_row(entries: Iterable[dict[str, Any]]) -> int | None:
+    """Dòng ô chọn sản phẩm (dropdown cột K) trong validations, nếu có."""
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        position = _cell_position(entry.get("cell"))
+        if position is not None and position[1] == column_index("K"):
+            return position[0]
+        rows = [int(row) for row in (entry.get("rows") or []) if isinstance(row, int)]
+        head = str(entry.get("range") or "").split(":", 1)[0]
+        if rows and head.upper().startswith("K"):
+            return rows[0]
+    return None
+
+
+def _shift_selector_refs(formula: str, old_row: int | None, new_row: int | None) -> str:
+    """Dời tham chiếu ô chọn ``K<dòng>`` trong công thức khi panel bị dời chỗ.
+
+    Google tự dời tham chiếu khi chèn dòng, nhưng tool ghi lại công thức bằng chuỗi
+    tường minh nên phải tự dời, nếu không VLOOKUP của panel vẫn trỏ ô chọn cũ.
+    """
+
+    if not formula or old_row is None or new_row is None or old_row == new_row:
+        return formula
+
+    def swap(match: re.Match[str]) -> str:
+        if int(match.group(1)) != old_row:
+            return match.group(0)
+        return match.group(0).replace(str(old_row), str(new_row))
+
+    return _SELECTOR_KEY_REF.sub(swap, formula)
+
+
 def _cell_position(cell: object) -> tuple[int, int] | None:
     match = _CELL.match(str(cell or "").strip())
     if match is None:
@@ -557,11 +594,18 @@ def _formula_requests(
     old_start: int,
     old_end: int,
     new_end: int,
+    selector_row: int | None = None,
 ) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
+    new_selector_row = (
+        selector_row + rows
+        if selector_row is not None and selector_row >= insert_at_row
+        else selector_row
+    )
     for item in snapshot.formulas:
         formula = str(item.get("formula") or "")
         replaced = _replace_span(formula, old_start, old_end, new_end)
+        replaced = _shift_selector_refs(replaced, selector_row, new_selector_row)
         if not formula or replaced == formula:
             continue
         position = _cell_position(item.get("cell"))
@@ -665,6 +709,7 @@ def build_expansion_requests(
         return []
     insert_at_row = insert_index + 1
     requests = [_insert_rows_request(sheet_id, insert_index, rows)]
+    selector_row = _selector_ref_row(snapshot.validations)
     requests.extend(
         _validation_requests(
             snapshot,
@@ -685,6 +730,7 @@ def build_expansion_requests(
             old_start=old_selector_start_row,
             old_end=old_selector_end_row,
             new_end=new_selector_end_row,
+            selector_row=selector_row,
         )
     )
     requests.extend(
@@ -771,6 +817,12 @@ def shift_menu_baseline(
     if rows <= 0:
         return baseline
     insert_at_row = insert_index + 1
+    selector_row = _selector_ref_row(baseline.data_validations)
+    new_selector_row = (
+        selector_row + rows
+        if selector_row is not None and selector_row >= insert_at_row
+        else selector_row
+    )
     merges = [
         {
             **merge,
@@ -790,11 +842,15 @@ def shift_menu_baseline(
     formulas = [
         {
             "cell": _shift_cell_name(str(item.get("cell") or ""), insert_at_row, rows),
-            "formula": _replace_span(
-                str(item.get("formula") or ""),
-                old_selector_start_row,
-                old_selector_end_row,
-                new_selector_end_row,
+            "formula": _shift_selector_refs(
+                _replace_span(
+                    str(item.get("formula") or ""),
+                    old_selector_start_row,
+                    old_selector_end_row,
+                    new_selector_end_row,
+                ),
+                selector_row,
+                new_selector_row,
             ),
         }
         for item in baseline.formulas

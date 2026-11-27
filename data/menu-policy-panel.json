@@ -1,0 +1,217 @@
+{
+  "source": "backups/phase43-final/migration-20261125T143440+0700/structures.json",
+  "captured_at": "2026-11-25T14:34:40+07:00",
+  "columns": [
+    "J",
+    "K",
+    "L",
+    "M"
+  ],
+  "first_row": 7,
+  "rows": {
+    "7": [
+      "BHF",
+      "Bảo hành Fulltime — Toàn thời gian theo hạn gói",
+      "",
+      ""
+    ],
+    "8": [
+      "",
+      "Bảo hành toàn thời gian trong thời hạn sử dụng gói. Nếu sản phẩm phát sinh lỗi trong thời gian này, khách được hỗ trợ bảo hành.",
+      "",
+      ""
+    ],
+    "9": [
+      "BH N NGÀY",
+      "Bảo hành giới hạn — Số ngày cụ thể (BH7N, BH10N, BH30N)",
+      "",
+      ""
+    ],
+    "10": [
+      "",
+      "Bảo hành trong số ngày cụ thể được ghi trên sản phẩm. Ví dụ BH7N, BH10N, BH30N. Lỗi phát sinh trong thời hạn bảo hành sẽ được hỗ trợ.",
+      "",
+      ""
+    ],
+    "11": [
+      "BH GÓI",
+      "Bảo hành gói — Bảo vệ quyền lợi sử dụng gói",
+      "",
+      ""
+    ],
+    "12": [
+      "",
+      "Bảo hành liên quan đến gói dịch vụ. Hỗ trợ khi gói bị mất, lỗi gói hoặc phát sinh vấn đề ảnh hưởng đến quyền lợi sử dụng gói.",
+      "",
+      ""
+    ],
+    "13": [
+      "KBH",
+      "Không bảo hành — Sản phẩm không áp dụng chính sách BH",
+      "",
+      ""
+    ],
+    "14": [
+      "",
+      "Sản phẩm không áp dụng chính sách bảo hành. Khách cần kiểm tra kỹ thông tin và điều kiện sản phẩm trước khi mua.",
+      "",
+      ""
+    ],
+    "15": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "16": [
+      "💰 BH REFUND — QUY ĐỊNH HOÀN TIỀN MINH BẠCH",
+      "",
+      "",
+      ""
+    ],
+    "17": [
+      "Áp dụng hoàn tiền khi không thể khắc phục hoặc bảo hành sản phẩm, thường do hết hàng, không có phương án thay thế hoặc lý do bất khả kháng.",
+      "",
+      "",
+      ""
+    ],
+    "18": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "19": [
+      "🔹 PHƯƠNG THỨC 1: REFUND THEO NGÀY GÓI CÒN LẠI",
+      "",
+      "",
+      ""
+    ],
+    "20": [
+      "Hoàn tiền dựa trên số ngày chưa sử dụng của toàn bộ gói sản phẩm.",
+      "",
+      "",
+      ""
+    ],
+    "21": [
+      "• Ví dụ: Gói GPT 1 tháng giá 120.000đ. Khách đã sử dụng 20 ngày, còn 10 ngày.",
+      "",
+      "",
+      ""
+    ],
+    "22": [
+      "120.000đ ÷ 30 ngày = 4.000đ/ngày",
+      "",
+      "4.000đ × 10 ngày còn lại = 40.000đ refund.",
+      ""
+    ],
+    "23": [
+      "➔ Kết quả hoàn tiền: 40.000đ",
+      "",
+      "",
+      ""
+    ],
+    "24": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "25": [
+      "🔸 PHƯƠNG THỨC 2: REFUND THEO NGÀY BẢO HÀNH CÒN LẠI",
+      "",
+      "",
+      ""
+    ],
+    "26": [
+      "Áp dụng với sản phẩm có bảo hành giới hạn ngày.",
+      "",
+      "",
+      ""
+    ],
+    "27": [
+      "• Ví dụ: Gói GPT 1 tháng giá 120.000đ, bảo hành 10 ngày. Khách gặp lỗi vào ngày thứ 8, còn 2 ngày bảo hành.",
+      "",
+      "",
+      ""
+    ],
+    "28": [
+      "120.000đ ÷ 10 ngày bảo hành = 12.000đ/ngày",
+      "",
+      "12.000đ × 2 ngày bảo hành còn lại = 24.000đ refund.",
+      ""
+    ],
+    "29": [
+      "➔ Kết quả hoàn tiền: 24.000đ",
+      "",
+      "",
+      ""
+    ],
+    "30": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "31": [
+      "⚠️ LƯU Ý PHÂN BIỆT RÕ RÀNG GIỮA 2 PHƯƠNG THỨC:",
+      "",
+      "",
+      ""
+    ],
+    "32": [
+      "• Phương thức 1: Tính theo số ngày gói còn lại.",
+      "",
+      "",
+      ""
+    ],
+    "33": [
+      "• Phương thức 2: Tính theo số ngày bảo hành còn lại.",
+      "",
+      "",
+      ""
+    ],
+    "34": [
+      "• Không được nhầm hai phương thức này.",
+      "",
+      "",
+      ""
+    ],
+    "35": [
+      "🔒 DIGITAL STORE • BẢO MẬT & BẢO HÀNH UY TÍN TUYỆT ĐỐI",
+      "",
+      "",
+      ""
+    ],
+    "36": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "37": [
+      "📋 CHI TIẾT MÔ TẢ SẢN PHẨM",
+      "",
+      "",
+      ""
+    ],
+    "38": [
+      "🔍 Chọn SP:",
+      "ChatGPT Plus 1 tháng riêng tư - BHF",
+      "",
+      ""
+    ],
+    "39": [
+      "⏱️ Thời hạn: 1 Tháng  •  🛡️ BH: BHF  •  💰 203.000 đ",
+      "",
+      "",
+      ""
+    ],
+    "40": [
+      "Định dạng : Email|Mật khẩu|2FA\nTài khoản riêng tư, Hàng siêu trâu mail trâu, chuẩn, đã test live trâu, phù hợp cho ae về viết kịch bản , nội dung, code , sáng tạo, ....\n\nÝ nghĩa từng phần:\n- Phần 1: Email đăng nhập\n- Phần 2: Mật khẩu\n- Phần 3: Khoá bí mật 2FA (dùng để lấy mã xác thực 6 số)\n\n--- CÁCH ĐĂNG NHẬP ---\n\n⚠️ LƯU Ý QUAN TRỌNG: KHÔNG bấm vào nút \"Tiếp tục với Google\" (Continue with Google)!\n\n1. Truy cập https://chatgpt.com và chọn \"Log in\".\n2. Nhập hoặc dán địa chỉ Email vào ô nhập liệu rồi bấm \"Continue\" (Tuyệt đối không chọn nút đăng nhập nhanh bằng Google).\n3. Nhập Mật khẩu và bấm \"Continue\".\n4. Khi hệ thống yêu cầu mã xác thực 6 chữ số (2FA / Authenticator App):\n- Mở trang web https://2fa.live\n- Dán chuỗi mã khoá 2FA (phần thứ 3) vào ô và bấm \"Submit\".\n- Sao chép 6 số hiển thị ra màn hình.\n- Nhập 6 số đó vào ô xác thực trên ChatGPT để hoàn tất đăng nhập.\n\n⚠️ *LƯU Ý SẢN PHẨM*\nThời gian bảo hành: 30 ngày\nĐược đổi pass thoải mái, không được xóa 2Fa , chỉ được thay đổi 2Fa - khách hàng xóa 2FA thì sẽ không được bảo hành\nKhách hàng sử dụng Codex thì phải tự xác minh sms, mẹo lấy số sms giá rẻ tại https://bom.so/lgnQix\n- Không bảo hành khi ver Codex, 9Router,, ... tắt 2fa, hoặc dính OTP về mail\nShop chỉ bh die & mất gói\n\nKhuyến nghị sử dụng: Nên giữ nguyên mật khẩu và 2FA mặc định để tài khoản duy trì độ ổn định cao nhất, hạn chế tối đa nguy cơ bị hệ thống ChatGPT quét checkpoint/khóa.",
+      "",
+      "",
+      ""
+    ]
+  }
+}

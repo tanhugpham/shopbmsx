@@ -153,12 +153,41 @@ python -m shop_integration restore --confirm   # chỉ ghi khi không còn xung 
 `restore` không ghi `Trang tính1`, không xóa dòng, không tạo file Google, không đổi
 quyền chia sẻ.
 
+### 6.4 Khôi phục layout MENU sau khi bị sửa tay
+
+Dùng khi `sync-menu-preflight` báo `MENU lệch baseline` vì ai đó chỉnh trực tiếp
+trên Google Sheets: dòng tiêu đề bị nhân bản, panel chính sách `J:M` bị cắt, mất
+dropdown `K`, mất công thức `J:M`, hoặc khổ cột bị auto-fit. Lệnh này dựng lại
+layout từ `data/menu-baseline.json` + `data/menu-policy-panel.json`, **không** đổi
+giá bán và **không** đổi nội dung sản phẩm `A:H`.
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m shop_integration sync-menu-restore                     # chỉ đọc, in kế hoạch
+python -m shop_integration sync-menu-restore --apply --confirm   # backup rồi mới ghi
+python -m shop_integration sync-menu-preflight                   # phải PASS sau khi ghi
+```
+
+Trình tự lệnh ghi:
+
+1. chụp `_MENU_SYNC_BACKUP` và `backups/menu-restore-<thời gian>.json`;
+2. bỏ gộp vùng `J:M` và footer, ghi lại panel `J:M` + khối footer từ bản lưu;
+3. gộp lại đúng 62 vùng, đặt dropdown `K`, hai công thức `J:M`, vùng bảo vệ, khổ cột;
+4. đọc lại và tự kiểm tra: đủ 62 vùng gộp, dropdown đúng vùng sản phẩm, hai công thức
+   trỏ đúng ô chọn `K`, danh sách `ProductID` và giá/tồn kho không đổi.
+
+Nếu Google Sheets đang bật **Table** (Bảng) trên vùng `A:H` thì phải xóa Table trước
+(`deleteTable`), vì Google chặn xóa dòng tiêu đề của Table và Table cũng tự thêm
+dòng tiêu đề + auto-fit khổ cột. Sau khi xóa Table, chạy lại `sync-menu-restore`.
+
 ## 7. Sự cố thường gặp
 
 | Hiện tượng | Nguyên nhân thường gặp | Việc cần làm |
 | --- | --- | --- |
 | `Preflight: FAIL` + tên biến | thiếu secret, còn biến cũ, cờ chưa `false` | sửa secret/`.env`, chạy lại `config-check` |
-| `MENU lệch baseline 'data/menu-baseline.json'` | ai đó đổi merge/công thức/dropdown/header | xem diff, khôi phục layout hoặc chụp baseline mới có chủ ý |
+| `MENU lệch baseline 'data/menu-baseline.json'` | ai đó đổi merge/công thức/dropdown/header | `sync-menu-restore` (mục 6.4), không sửa tay từng ô |
+| `Dòng tiêu đề MENU bị nhân bản ở dòng 8` | ai đó chuyển vùng `A:H` thành Table hoặc copy dòng tiêu đề | xóa Table nếu có, rồi `sync-menu-restore --apply --confirm` |
+| `Cannot delete a table header row` | Google Sheets Table đang bật trên `A:H` | `deleteTable` rồi chạy lại `sync-menu-restore` |
 | `Dòng tiêu đề MENU không đúng` | header A–H đổi tên hoặc đổi thứ tự | sửa header, không đổi baseline để lách |
 | `MenuCapacity` / hết hàng trống | vùng A:H không còn dòng trống trong danh mục | để `MENU_AUTO_EXPAND=true` chèn thêm, hoặc xử lý tay rồi chạy lại |
 | `MENU_GROUP_SIMILAR` báo lệch sau khi ghi | đọc lại không khớp payload | dừng sync, khôi phục từ `_MENU_SYNC_BACKUP`, báo lỗi kèm đường dẫn `backups/` |

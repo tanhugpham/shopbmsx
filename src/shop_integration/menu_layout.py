@@ -297,6 +297,7 @@ class MenuBaseline:
     grid_properties: dict[str, Any] = field(default_factory=dict)
     tab: str = MENU_TAB
     captured_at: str = ""
+    duplicate_header_rows: tuple[int, ...] = ()
 
     @property
     def merge_count(self) -> int:
@@ -410,7 +411,32 @@ def menu_baseline_from_structure(
         grid_properties=dict(structure.get("grid_properties") or {}),
         tab=str(structure.get("title") or MENU_TAB),
         captured_at=captured_at,
+        duplicate_header_rows=_duplicate_header_rows(values, header_row, headers),
     )
+
+
+def _duplicate_header_rows(
+    values: Sequence[Sequence[Any]],
+    header_row: int | None,
+    headers: Sequence[str],
+) -> tuple[int, ...]:
+    """Dòng tiêu đề bị nhân bản: A:H trùng đúng bộ tiêu đề, nằm dưới dòng tiêu đề."""
+
+    if header_row is None or not headers:
+        return ()
+    wanted = [str(header).strip().upper() for header in headers]
+    found: list[int] = []
+    for index, row in enumerate(values, start=1):
+        if index <= header_row:
+            continue
+        cells = [
+            str(row[column]).strip().upper() if column < len(row) else ""
+            for column in range(len(wanted))
+        ]
+        if cells == wanted:
+            found.append(index)
+    return tuple(found)
+
 
 
 def save_menu_baseline(baseline: MenuBaseline, path: str | Path) -> Path:
@@ -480,8 +506,23 @@ def _merge_key(merge: dict[str, int]) -> tuple[int, int, int, int]:
     )
 
 
+_PANEL_KEY_CELL = re.compile(r"(?<![A-Za-z0-9_$])\$?K\$?\d+(?!\d)")
+
+
 def _formula_key(item: dict[str, str]) -> tuple[str, str]:
-    return (str(item.get("cell") or "").upper(), str(item.get("formula") or ""))
+    """Khóa so sánh công thức. Ô chọn ``K<dòng>`` được chuẩn hóa vì Google dời nó.
+
+    Panel J:M tham chiếu ô chọn sản phẩm bằng ``K<dòng>``. Khi chèn dòng (hoặc khi
+    khôi phục layout), dòng đó đổi chỗ, còn vùng sản phẩm thì đã được kiểm tra riêng
+    qua dropdown và ``B<đầu>:`` trong công thức. Chuẩn hóa để baseline không báo lệch
+    chỉ vì ô chọn dời dòng.
+    """
+
+    cell = str(item.get("cell") or "").upper()
+    formula = str(item.get("formula") or "")
+    normalized = _PANEL_KEY_CELL.sub("K#", formula)
+    return (cell, normalized)
+
 
 
 def _validation_key(item: dict[str, Any]) -> tuple[str, str, str]:
@@ -525,6 +566,12 @@ def menu_structure_diff(
         differences.append(
             "Dòng tiêu đề MENU đổi: "
             f"'{' | '.join(baseline.headers)}' → '{' | '.join(current.headers)}'."
+        )
+    if current.duplicate_header_rows:
+        differences.append(
+            "Dòng tiêu đề MENU bị nhân bản ở dòng "
+            + ", ".join(str(row) for row in current.duplicate_header_rows)
+            + " (sửa tay trong Google Sheets)."
         )
     missing_merges = sorted(
         set(map(_merge_key, baseline.merged_ranges))
